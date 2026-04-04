@@ -1,10 +1,11 @@
-import { Card, Spin, Table, Drawer } from "antd";
-import { useMemo, useState } from "react";
+import { Button, Card, Spin, Table, Drawer } from "antd";
+import { useEffect, useMemo, useState } from "react";
 import StatCard from "../SharedComponents/StatCard";
 import TablePagination from "../SharedComponents/TablePagination";
 import { X } from "lucide-react";
 import FiltersBar from "../SharedComponents/Filters/FiltersBar";
 import DeleteConfirmModal from "../SharedComponents/Modals/DeleteConfirmModal";
+import ListView from "../SharedComponents/Calendar/ListView";
 
 const FONT = { fontFamily: "'Montserrat', sans-serif" };
 const FONT_SM = { ...FONT, fontSize: 12 };
@@ -58,11 +59,17 @@ const ModuleLayoutsOne = ({
   tableHeaderBadges,
   tableHeaderAction,
   tableExtra,
+  enableListViewToggle,
   isTrashView,
   loading,
   deleteModalProps,
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth < 768 : false,
+  );
+  const [hasManualViewSelection, setHasManualViewSelection] = useState(false);
+  const [viewType, setViewType] = useState(() => (isMobile ? "list" : "table"));
 
   const openModal = () => setIsModalOpen(true);
   const closeModal = () => setIsModalOpen(false);
@@ -81,6 +88,25 @@ const ModuleLayoutsOne = ({
     }
     return headerContent;
   }, [headerContent, isModalOpen]);
+
+  const shouldShowViewToggle = Boolean(enableListViewToggle || tableProps);
+  const shouldUseTablePropsRenderer = Boolean(tableProps);
+  const tableContentNode =
+    typeof tableContent === "function"
+      ? tableContent({ viewType, setViewType })
+      : tableContent;
+
+  useEffect(() => {
+    const handleResize = () => {
+      const nextIsMobile = window.innerWidth < 768;
+      setIsMobile(nextIsMobile);
+      if (!hasManualViewSelection) {
+        setViewType(nextIsMobile ? "list" : "table");
+      }
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [hasManualViewSelection]);
 
   return (
     <div className="space-y-6" style={{ backgroundColor: COLORS.white, minHeight: '100%' }}>
@@ -170,23 +196,60 @@ const ModuleLayoutsOne = ({
                 </span>
               )}
             </div>
-            {tableHeaderAction || tableExtra || null}
+            <div className="flex items-center gap-2">
+              {shouldShowViewToggle ? (
+                <>
+                  <Button
+                    htmlType="button"
+                    type={viewType === "table" ? "primary" : "default"}
+                    size="small"
+                    onClick={() => {
+                      setHasManualViewSelection(true);
+                      setViewType("table");
+                    }}
+                  >
+                    Table
+                  </Button>
+                  <Button
+                    htmlType="button"
+                    type={viewType === "list" ? "primary" : "default"}
+                    size="small"
+                    onClick={() => {
+                      setHasManualViewSelection(true);
+                      setViewType("list");
+                    }}
+                  >
+                    List
+                  </Button>
+                </>
+              ) : null}
+              {tableHeaderAction || tableExtra || null}
+            </div>
           </div>
 
-          {tableContent ||
-            (tableProps ? (
+          {tableContentNode ||
+            (shouldUseTablePropsRenderer ? (
               <>
-                <Table
-                  {...tableProps}
-                  pagination={false}
-                  size={tableProps.size || "middle"}
-                  style={tableProps.style || FONT}
-                  rowClassName={
-                    tableProps.rowClassName ||
-                    (() => "transition-colors cursor-pointer")
-                  }
-                  scroll={tableProps.scroll || { x: 1100, y: 520 }}
-                />
+                {viewType === "table" ? (
+                  <Table
+                    {...tableProps}
+                    pagination={false}
+                    size={tableProps.size || "middle"}
+                    style={tableProps.style || FONT}
+                    rowClassName={
+                      tableProps.rowClassName ||
+                      (() => "transition-colors cursor-pointer")
+                    }
+                    scroll={tableProps.scroll || { x: 1100, y: 520 }}
+                  />
+                ) : (
+                  <ListView
+                    columns={tableProps.columns || []}
+                    dataSource={tableProps.dataSource || []}
+                    rowKey={tableProps.rowKey || "key"}
+                    loading={Boolean(tableProps.loading)}
+                  />
+                )}
                 {pagination ? <TablePagination {...pagination} /> : null}
               </>
             ) : null)}
@@ -311,7 +374,7 @@ const ModuleLayoutsOne = ({
             </button>
             <div className="flex items-start gap-4">
               {m.icon && (
-                <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg, ${idx === 0 ? COLORS.coral : COLORS.coralMid} 0%, ${idx === 0 ? COLORS.coralSoft : COLORS.coral} 100%)`, display: "flex", alignItems: "center", justifyCenter: "center", boxShadow: `0 4px 12px ${COLORS.coral}40`, flexShrink: 0, color: "#ffffff" }}>
+                <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg, ${idx === 0 ? COLORS.coral : COLORS.coralMid} 0%, ${idx === 0 ? COLORS.coralSoft : COLORS.coral} 100%)`, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 4px 12px ${COLORS.coral}40`, flexShrink: 0, color: "#ffffff" }}>
                   {m.icon}
                 </div>
               )}

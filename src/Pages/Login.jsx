@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Button, Card, Input, Typography } from "antd";
-import { LockKeyhole, Mail, Smartphone } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { clearAuthError, fetchProfile, login } from "../Store/Features/authSlice";
 
@@ -68,7 +67,6 @@ const Login = () => {
             <Text className="text-xs font-bold uppercase tracking-wide text-slate-600">Email or Phone Number</Text>
             <Input
               size="large"
-              prefix={formValues.identifier.includes("@") ? <Mail size={14} color="#94a3b8" /> : <Smartphone size={14} color="#94a3b8" />}
               placeholder="you@company.com or 2547xxxxxxx"
               value={formValues.identifier}
               onChange={(event) => onValueChange("identifier", event.target.value)}
@@ -81,7 +79,7 @@ const Login = () => {
             <Text className="text-xs font-bold uppercase tracking-wide text-slate-600">Password</Text>
             <Input.Password
               size="large"
-              prefix={<LockKeyhole size={14} color="#94a3b8" />}
+              
               placeholder="Enter password"
               value={formValues.password}
               onChange={(event) => onValueChange("password", event.target.value)}

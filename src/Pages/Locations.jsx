@@ -1,11 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Button } from "antd";
-import { MapPinned, Plus } from "lucide-react";
+import { Eye, MapPinned, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import ModuleLayoutsOne from "../Layouts/ModuleLayoutsOne";
 import ReusableSlideForm from "../SharedComponents/Forms/ReusableSlideForm";
-import { createLocation, fetchLocations } from "../Store/Features/locationsSlice";
+import {
+  createLocation,
+  deleteLocation,
+  fetchLocations,
+  updateLocation,
+} from "../Store/Features/locationsSlice";
 import { colTitle } from "../SharedComponents/ColumnComponents/ColumnTitle";
 import ColumnData from "../SharedComponents/ColumnComponents/ColumnData";
 import StatusBadge from "../SharedComponents/ColumnComponents/StatusBadge";
@@ -13,15 +18,46 @@ import StatusBadge from "../SharedComponents/ColumnComponents/StatusBadge";
 const initialValues = {
   name: "",
   code: "",
-  address: "",
-  timezone: "Africa/Nairobi",
 };
+
+const locationEditableFields = [
+  { name: "name", label: "Location Name", required: true, placeholder: "e.g. Westlands Branch" },
+  { name: "code", label: "Code", required: true, placeholder: "e.g. WST-01" },
+];
+
+const toAddressSummary = (address = {}) =>
+  [address.line_1, address.line_2, address.city, address.state, address.postal_code, address.country]
+    .filter(Boolean)
+    .join(", ");
+
+const mapLocationToForm = (item) => ({
+  name: item?.name || "",
+  code: item?.code || "",
+});
+
+const buildCreatePayload = (formValues) => ({
+  name: formValues.name.trim(),
+  code: formValues.code.trim().toUpperCase(),
+  timezone: "Africa/Nairobi",
+  is_active: true,
+  address: {},
+});
+
+const buildUpdatePayload = (formValues) => ({
+  name: formValues.name.trim(),
+  code: formValues.code.trim().toUpperCase(),
+});
 
 const Locations = () => {
   const dispatch = useDispatch();
   const { list, loading, saving } = useSelector((state) => state.locations);
   const [values, setValues] = useState(initialValues);
   const [errors, setErrors] = useState({});
+  const [editOpen, setEditOpen] = useState(false);
+  const [viewOpen, setViewOpen] = useState(false);
+  const [editingLocation, setEditingLocation] = useState(null);
+  const [viewingLocation, setViewingLocation] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   useEffect(() => {
     dispatch(fetchLocations());
@@ -32,10 +68,10 @@ const Locations = () => {
     setErrors((prev) => ({ ...prev, [name]: undefined }));
   };
 
-  const validate = () => {
+  const validate = (payload) => {
     const nextErrors = {};
-    if (!values.name.trim()) nextErrors.name = "Location name is required";
-    if (!values.timezone.trim()) nextErrors.timezone = "Timezone is required";
+    if (!payload.name.trim()) nextErrors.name = "Location name is required";
+    if (!payload.code.trim()) nextErrors.code = "Location code is required";
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };
@@ -44,32 +80,67 @@ const Locations = () => {
     () =>
       list.map((item) => ({
         key: item?._id || item?.id,
+        raw: item,
         name: item?.name || "Unnamed Location",
         code: item?.code || item?.location_code || "N/A",
-        address: item?.address || item?.street || "N/A",
+        address: toAddressSummary(item?.address) || "N/A",
         timezone: item?.timezone || item?.location_timezone || "N/A",
-        status: item?.status || "active",
+        status: item?.is_active === false ? "deactivated" : "active",
       })),
     [list],
   );
 
+  const canAddLocation = rows.length < 4;
+
   const handleSubmit = async (event, closeModal) => {
     event.preventDefault();
-    if (!validate()) return;
-    const result = await dispatch(
-      createLocation({
-        name: values.name.trim(),
-        code: values.code.trim() || undefined,
-        address: values.address.trim() || undefined,
-        timezone: values.timezone.trim(),
-      }),
-    );
+    if (!validate(values)) return;
+    const result = await dispatch(createLocation(buildCreatePayload(values)));
     if (createLocation.fulfilled.match(result)) {
       toast.success("Location created");
       setValues(initialValues);
       closeModal();
     } else {
       toast.error(result?.payload || "Failed to create location");
+    }
+  };
+
+  const openEditModal = (record) => {
+    setEditingLocation(record);
+    setValues(mapLocationToForm(record.raw));
+    setErrors({});
+    setEditOpen(true);
+  };
+
+  const handleUpdateSubmit = async (event) => {
+    event.preventDefault();
+    if (!editingLocation) return;
+    if (!validate(values)) return;
+    const result = await dispatch(
+      updateLocation({
+        id: editingLocation.key,
+        ...buildUpdatePayload(values),
+      }),
+    );
+    if (updateLocation.fulfilled.match(result)) {
+      toast.success("Location updated");
+      setEditOpen(false);
+      setEditingLocation(null);
+      setValues(initialValues);
+      dispatch(fetchLocations());
+    } else {
+      toast.error(result?.payload || "Failed to update location");
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    const result = await dispatch(deleteLocation(deleteTarget.key));
+    if (deleteLocation.fulfilled.match(result)) {
+      toast.success("Location deleted");
+      setDeleteTarget(null);
+    } else {
+      toast.error(result?.payload || "Failed to delete location");
     }
   };
 
@@ -98,17 +169,49 @@ const Locations = () => {
       key: "status",
       render: (status) => <StatusBadge status={status} />,
     },
+    {
+      title: colTitle("Action"),
+      key: "action",
+      render: (_, record) => (
+        <div className="flex items-center gap-2">
+          <Button
+            type="text"
+            className="h-8 w-8 rounded-lg bg-slate-100 text-slate-700"
+            icon={<Eye size={13} />}
+            onClick={() => {
+              setViewingLocation(record);
+              setViewOpen(true);
+            }}
+          />
+          <Button
+            type="text"
+            className="h-8 w-8 rounded-lg bg-blue-50 text-blue-600"
+            icon={<Pencil size={13} />}
+            onClick={() => openEditModal(record)}
+          />
+          <Button
+            danger
+            type="text"
+            className="h-8 w-8 rounded-lg bg-rose-50 text-rose-600"
+            icon={<Trash2 size={13} />}
+            onClick={() => setDeleteTarget(record)}
+          />
+        </div>
+      ),
+    },
   ];
 
   return (
     <ModuleLayoutsOne
       title="Location Management"
       subtitle="Define operating locations used by scheduling and shifts."
-      headerAction={({ openModal }) => (
-        <Button type="primary" icon={<Plus size={14} />} className="h-10 rounded-xl font-bold" onClick={openModal}>
-          Add Location
-        </Button>
-      )}
+      headerAction={({ openModal }) =>
+        canAddLocation ? (
+          <Button type="primary" icon={<Plus size={14} />} className="h-10 rounded-xl font-bold" onClick={openModal}>
+            Add Location
+          </Button>
+        ) : null
+      }
       tableTitle="Locations"
       totalRecords={rows.length}
       tableProps={{
@@ -116,20 +219,86 @@ const Locations = () => {
         dataSource: rows,
         loading,
       }}
+      editModalOpen={editOpen}
+      onEditModalClose={() => {
+        setEditOpen(false);
+        setEditingLocation(null);
+        setValues(initialValues);
+        setErrors({});
+      }}
+      editModalTitle="Edit Location"
+      editModalSubtitle="Only name and code are editable."
+      editModalIcon={<Pencil size={20} />}
+      editModalContent={() => (
+        <ReusableSlideForm
+          title="Edit Location"
+          subtitle="Update only location name and code."
+          icon={Pencil}
+          fields={locationEditableFields}
+          values={values}
+          errors={errors}
+          loading={saving}
+          submitLabel="Update Location"
+          onValueChange={onValueChange}
+          onSubmit={handleUpdateSubmit}
+          onCancel={() => {
+            setEditOpen(false);
+            setEditingLocation(null);
+            setValues(initialValues);
+            setErrors({});
+          }}
+        />
+      )}
+      secondaryModalOpen={viewOpen}
+      onSecondaryModalClose={() => {
+        setViewOpen(false);
+        setViewingLocation(null);
+      }}
+      secondaryModalTitle="Location Details"
+      secondaryModalSubtitle="Read-only location data."
+      secondaryModalIcon={<Eye size={20} />}
+      secondaryModalContent={
+        viewingLocation ? (
+          <div className="space-y-4 text-sm">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Name</p>
+              <p className="font-semibold text-slate-800">{viewingLocation.name}</p>
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Code</p>
+              <p className="font-semibold text-slate-800">{viewingLocation.code}</p>
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Timezone</p>
+              <p className="font-semibold text-slate-800">{viewingLocation.timezone}</p>
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Address</p>
+              <p className="font-semibold text-slate-800">{viewingLocation.address}</p>
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Status</p>
+              <p className="font-semibold text-slate-800">{viewingLocation.status}</p>
+            </div>
+          </div>
+        ) : null
+      }
+      deleteModalProps={{
+        visible: Boolean(deleteTarget),
+        onCancel: () => setDeleteTarget(null),
+        onConfirm: handleDeleteConfirm,
+        title: "Delete Location",
+        subtitle: `Delete ${deleteTarget?.name || "this location"}? This action cannot be undone.`,
+      }}
       modalTitle="Create Location"
-      modalSubtitle="Add a new location in a reusable side form."
+      modalSubtitle="Add a new location."
       modalIcon={<MapPinned size={20} />}
       modalContent={({ closeModal }) => (
         <ReusableSlideForm
           title="Location Details"
-          subtitle="This same form pattern is reused across create pages."
+          subtitle="Create location with name and code."
           icon={MapPinned}
-          fields={[
-            { name: "name", label: "Location Name", required: true, placeholder: "e.g. Westlands Branch" },
-            { name: "code", label: "Code", placeholder: "e.g. WST-01" },
-            { name: "address", label: "Address", type: "textarea", placeholder: "Physical address" },
-            { name: "timezone", label: "Timezone", required: true, placeholder: "e.g. Africa/Nairobi" },
-          ]}
+          fields={locationEditableFields}
           values={values}
           errors={errors}
           loading={saving}

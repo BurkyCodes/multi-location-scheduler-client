@@ -3,6 +3,36 @@ import { CheckCircleOutlined, ClockCircleOutlined, WarningOutlined } from "@ant-
 import { FONT } from "../FormBits";
 
 const STATUS_META = {
+  active: {
+    icon: <CheckCircleOutlined className="text-[10px]" />,
+    className: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    label: "active",
+  },
+  deactivated: {
+    icon: <WarningOutlined className="text-[10px]" />,
+    className: "bg-slate-100 text-slate-700 border-slate-200",
+    label: "deactivated",
+  },
+  draft: {
+    icon: <ClockCircleOutlined className="text-[10px]" />,
+    className: "bg-slate-100 text-slate-700 border-slate-200",
+    label: "draft",
+  },
+  assigned: {
+    icon: <CheckCircleOutlined className="text-[10px]" />,
+    className: "bg-blue-50 text-blue-700 border-blue-200",
+    label: "assigned",
+  },
+  rejected: {
+    icon: <WarningOutlined className="text-[10px]" />,
+    className: "bg-red-50 text-red-700 border-red-200",
+    label: "rejected",
+  },
+  approved: {
+    icon: <CheckCircleOutlined className="text-[10px]" />,
+    className: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    label: "approved",
+  },
   published: {
     icon: <CheckCircleOutlined className="text-[10px]" />,
     className: "bg-emerald-50 text-emerald-700 border-emerald-200",

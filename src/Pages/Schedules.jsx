@@ -9,6 +9,7 @@ import { fetchLocations } from "../Store/Features/locationsSlice";
 import { colTitle } from "../SharedComponents/ColumnComponents/ColumnTitle";
 import ColumnData from "../SharedComponents/ColumnComponents/ColumnData";
 import StatusBadge from "../SharedComponents/ColumnComponents/StatusBadge";
+import { hasRole } from "../utils/roles";
 
 const FONT = { fontFamily: "'Montserrat', sans-serif" };
 const FONT_SM = { ...FONT, fontSize: 12 };
@@ -59,6 +60,7 @@ const Schedules = () => {
     (Array.isArray(currentUser?.status) && currentUser.status.length ? currentUser.status[0] : "") ||
     "";
   const isManager = String(roleLabel).toLowerCase().includes("manager");
+  const canCreateSchedule = hasRole(currentUser, ["manager"]);
 
   const userLocationIds = useMemo(() => {
     const raw = currentUser?.location_ids || currentUser?.locations || [];
@@ -189,17 +191,22 @@ const Schedules = () => {
     <ModuleLayoutsOne
       title="Schedule Builder"
       subtitle="Create schedules by location and week start date."
-      headerAction={({ openModal }) => (
-        <Button type="primary" icon={<Plus size={14} />} className="h-10 rounded-xl font-bold" onClick={openModal}>
-          Create Schedule
-        </Button>
-      )}
+      headerAction={({ openModal }) =>
+        canCreateSchedule ? (
+          <Button type="primary" icon={<Plus size={14} />} className="h-10 rounded-xl font-bold" onClick={openModal}>
+            Create Schedule
+          </Button>
+        ) : null
+      }
       tableTitle="Schedules"
       totalRecords={rows.length}
       tableProps={{
         columns,
         dataSource: rows,
         loading,
+        style: FONT,
+        rowClassName: () => "transition-colors cursor-pointer",
+        scroll: { x: 1100, y: 520 },
       }}
       modalTitle="Create Schedule"
       modalSubtitle="2-step form with required schedule fields."

@@ -9,7 +9,10 @@ import Staff from "../Pages/Staff";
 import Locations from "../Pages/Locations";
 import Swaps from "../Pages/Swaps";
 import Settings from "../Pages/Settings";
+import Availability from "../Pages/Availability";
+import StaffAssignments from "../Pages/StaffAssignments";
 import { fetchProfile, verifyAuth } from "../Store/Features/authSlice";
+import { hasRole } from "../utils/roles";
 
 const ProtectedLayout = () => {
   const dispatch = useDispatch();
@@ -36,6 +39,12 @@ const PublicOnlyRoute = () => {
   return <Outlet />;
 };
 
+const RoleRoute = ({ roles }) => {
+  const user = useSelector((state) => state.auth.user);
+  if (!hasRole(user, roles)) return <Navigate to="/" replace />;
+  return <Outlet />;
+};
+
 const router = createBrowserRouter([
   {
     element: <PublicOnlyRoute />,
@@ -46,9 +55,26 @@ const router = createBrowserRouter([
     element: <ProtectedLayout />,
     children: [
       { index: true, element: <Dashboard /> },
-      { path: "schedule", element: <Schedules /> },
-      { path: "staff", element: <Staff /> },
-      { path: "locations", element: <Locations /> },
+      {
+        element: <RoleRoute roles={["admin", "manager"]} />,
+        children: [{ path: "schedule", element: <Schedules /> }],
+      },
+      {
+        element: <RoleRoute roles={["admin"]} />,
+        children: [{ path: "staff", element: <Staff /> }],
+      },
+      {
+        element: <RoleRoute roles={["staff"]} />,
+        children: [{ path: "availability", element: <Availability /> }],
+      },
+      {
+        element: <RoleRoute roles={["admin", "manager"]} />,
+        children: [{ path: "assignments", element: <StaffAssignments /> }],
+      },
+      {
+        element: <RoleRoute roles={["admin", "manager"]} />,
+        children: [{ path: "locations", element: <Locations /> }],
+      },
       { path: "swaps", element: <Swaps /> },
       { path: "settings", element: <Settings /> },
     ],

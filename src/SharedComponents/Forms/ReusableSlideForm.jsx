@@ -22,6 +22,10 @@ const SectionHeader = ({ icon, title, subtitle }) => {
       >
         {HeaderIcon ? <HeaderIcon size={16} color="#f6873a" /> : null}
       </div>
+      <div>
+        <div style={{ ...FONT, fontSize: 14, fontWeight: 800, color: "#0f172a" }}>{title}</div>
+        {subtitle ? <div style={{ ...FONT_XS, color: "#64748b" }}>{subtitle}</div> : null}
+      </div>
     </div>
   );
 };
@@ -67,7 +71,10 @@ const textAreaStyle = (hasError) => ({
 });
 
 const renderField = (field, values, errors, onValueChange) => {
-  const value = values[field.name] ?? "";
+  const value =
+    field.type === "multiselect"
+      ? (Array.isArray(values[field.name]) ? values[field.name] : [])
+      : (values[field.name] ?? "");
   const error = errors[field.name];
 
   return (
@@ -87,6 +94,28 @@ const renderField = (field, values, errors, onValueChange) => {
           style={inputStyle(Boolean(error))}
         >
           <option value="">{field.placeholder || `Select ${field.label}`}</option>
+          {(field.options || []).map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      ) : field.type === "multiselect" ? (
+        <select
+          multiple
+          value={value}
+          onChange={(event) =>
+            onValueChange(
+              field.name,
+              Array.from(event.target.selectedOptions).map((option) => option.value),
+            )
+          }
+          style={{
+            ...inputStyle(Boolean(error)),
+            height: 120,
+            padding: "8px 12px",
+          }}
+        >
           {(field.options || []).map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}

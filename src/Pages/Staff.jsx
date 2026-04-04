@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Button } from "antd";
-import { Plus, UserPlus } from "lucide-react";
+import { Eye, Pencil, Plus, Trash2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import ModuleLayoutsOne from "../Layouts/ModuleLayoutsOne";
 import ReusableSlideForm from "../SharedComponents/Forms/ReusableSlideForm";
-import { createStaff, fetchStaff } from "../Store/Features/staffSlice";
+import { createStaff, deleteStaff, fetchStaff, updateStaff } from "../Store/Features/staffSlice";
+import { fetchLocations } from "../Store/Features/locationsSlice";
 import { colTitle } from "../SharedComponents/ColumnComponents/ColumnTitle";
 import ColumnData from "../SharedComponents/ColumnComponents/ColumnData";
 import StatusBadge from "../SharedComponents/ColumnComponents/StatusBadge";
@@ -15,17 +16,28 @@ const initialValues = {
   email: "",
   phone_number: "",
   role: "staff",
+  location_ids: [],
+  status: "active",
 };
+
+const getId = (value) => (typeof value === "object" ? value?._id || value?.id : value);
 
 const Staff = () => {
   const dispatch = useDispatch();
   const { list, loading, saving } = useSelector((state) => state.staff);
+  const { list: locations } = useSelector((state) => state.locations);
 
   const [values, setValues] = useState(initialValues);
   const [errors, setErrors] = useState({});
+  const [editOpen, setEditOpen] = useState(false);
+  const [viewOpen, setViewOpen] = useState(false);
+  const [editingStaff, setEditingStaff] = useState(null);
+  const [viewingStaff, setViewingStaff] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
 
   useEffect(() => {
     dispatch(fetchStaff());
+    dispatch(fetchLocations());
   }, [dispatch]);
 
   const onValueChange = (name, value) => {
@@ -33,38 +45,53 @@ const Staff = () => {
     setErrors((prev) => ({ ...prev, [name]: undefined }));
   };
 
-  const validate = () => {
+  const validate = (payload) => {
     const nextErrors = {};
-    if (!values.name.trim()) nextErrors.name = "Name is required";
-    if (!values.email.trim()) nextErrors.email = "Email is required";
-    if (!/^\S+@\S+\.\S+$/.test(values.email.trim())) nextErrors.email = "Enter a valid email";
-    if (!values.phone_number.trim()) nextErrors.phone_number = "Phone number is required";
+    if (!payload.name.trim()) nextErrors.name = "Name is required";
+    if (!payload.email.trim()) nextErrors.email = "Email is required";
+    if (!/^\S+@\S+\.\S+$/.test(payload.email.trim())) nextErrors.email = "Enter a valid email";
+    if (!payload.phone_number.trim()) nextErrors.phone_number = "Phone number is required";
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };
+
+  const locationNameById = useMemo(
+    () =>
+      locations.reduce((acc, location) => {
+        acc[String(getId(location))] = location?.name || "Unnamed Location";
+        return acc;
+      }, {}),
+    [locations],
+  );
 
   const rows = useMemo(
     () =>
       list.map((item) => ({
         key: item?._id || item?.id,
+        raw: item,
         name: item?.name || "Unnamed",
         email: item?.email || "N/A",
         phone: item?.phone_number || item?.phone || "N/A",
         role: item?.role_id?.role || item?.role || "staff",
         status: item?.status || "active",
+        locations: (item?.location_ids || [])
+          .map((locationId) => locationNameById[String(getId(locationId))] || "Unknown Location")
+          .join(", "),
       })),
-    [list],
+    [list, locationNameById],
   );
 
   const handleSubmit = async (event, closeModal) => {
     event.preventDefault();
-    if (!validate()) return;
+    if (!validate(values)) return;
     const result = await dispatch(
       createStaff({
         name: values.name.trim(),
         email: values.email.trim(),
         phone_number: values.phone_number.trim(),
         role: values.role,
+        status: values.status,
+        location_ids: values.location_ids,
       }),
     );
     if (createStaff.fulfilled.match(result)) {
@@ -75,6 +102,103 @@ const Staff = () => {
       toast.error(result?.payload || "Failed to create staff");
     }
   };
+
+  const openEditModal = (record) => {
+    const item = record.raw;
+    setEditingStaff(record);
+    setErrors({});
+    setValues({
+      name: item?.name || "",
+      email: item?.email || "",
+      phone_number: item?.phone_number || "",
+      role: item?.role_id?.role || item?.role || "staff",
+      status: item?.status || "active",
+      location_ids: (item?.location_ids || []).map((locationId) => String(getId(locationId))).filter(Boolean),
+    });
+    setEditOpen(true);
+  };
+
+  const handleUpdateSubmit = async (event) => {
+    event.preventDefault();
+    if (!editingStaff) return;
+    if (!validate(values)) return;
+
+    const result = await dispatch(
+      updateStaff({
+        id: editingStaff.key,
+        name: values.name.trim(),
+        email: values.email.trim(),
+        phone_number: values.phone_number.trim(),
+        role: values.role,
+        status: values.status,
+        location_ids: values.location_ids,
+      }),
+    );
+
+    if (updateStaff.fulfilled.match(result)) {
+      toast.success("Staff member updated");
+      setEditOpen(false);
+      setEditingStaff(null);
+      setValues(initialValues);
+      dispatch(fetchStaff());
+    } else {
+      toast.error(result?.payload || "Failed to update staff");
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteTarget) return;
+    const result = await dispatch(deleteStaff(deleteTarget.key));
+    if (deleteStaff.fulfilled.match(result)) {
+      toast.success("Staff member deleted");
+      setDeleteTarget(null);
+    } else {
+      toast.error(result?.payload || "Failed to delete staff");
+    }
+  };
+
+  const locationOptions = useMemo(
+    () =>
+      locations.map((location) => ({
+        value: String(getId(location)),
+        label: location?.name || "Unnamed Location",
+      })),
+    [locations],
+  );
+
+  const sharedStaffFields = [
+    { name: "name", label: "Full Name", required: true, placeholder: "e.g. Angela Wanjiru" },
+    { name: "email", label: "Email", type: "email", required: true, placeholder: "name@company.com" },
+    { name: "phone_number", label: "Phone Number", required: true, placeholder: "e.g. 0114116073" },
+    {
+      name: "role",
+      label: "Role",
+      type: "select",
+      required: true,
+      options: [
+        { value: "staff", label: "Staff" },
+        { value: "manager", label: "Manager" },
+        { value: "admin", label: "Admin" },
+      ],
+    },
+    {
+      name: "status",
+      label: "Status",
+      type: "select",
+      required: true,
+      options: [
+        { value: "active", label: "Active" },
+        { value: "deactivated", label: "Deactivated" },
+      ],
+    },
+    {
+      name: "location_ids",
+      label: "Assigned Locations",
+      type: "multiselect",
+      options: locationOptions,
+      hint: "Hold Ctrl/Cmd to select multiple locations",
+    },
+  ];
 
   const columns = [
     {
@@ -96,10 +220,46 @@ const Staff = () => {
       render: (role) => <ColumnData text={String(role).toUpperCase()} />,
     },
     {
+      title: colTitle("Locations"),
+      dataIndex: "locations",
+      key: "locations",
+      render: (locationsValue) => <ColumnData text={locationsValue || "Not assigned"} />,
+    },
+    {
       title: colTitle("Status"),
       dataIndex: "status",
       key: "status",
       render: (status) => <StatusBadge status={status} />,
+    },
+    {
+      title: colTitle("Action"),
+      key: "action",
+      render: (_, record) => (
+        <div className="flex items-center gap-2">
+          <Button
+            type="text"
+            className="h-8 w-8 rounded-lg bg-slate-100 text-slate-700"
+            icon={<Eye size={13} />}
+            onClick={() => {
+              setViewingStaff(record);
+              setViewOpen(true);
+            }}
+          />
+          <Button
+            type="text"
+            className="h-8 w-8 rounded-lg bg-blue-50 text-blue-600"
+            icon={<Pencil size={13} />}
+            onClick={() => openEditModal(record)}
+          />
+          <Button
+            danger
+            type="text"
+            className="h-8 w-8 rounded-lg bg-rose-50 text-rose-600"
+            icon={<Trash2 size={13} />}
+            onClick={() => setDeleteTarget(record)}
+          />
+        </div>
+      ),
     },
   ];
 
@@ -119,6 +279,81 @@ const Staff = () => {
         dataSource: rows,
         loading,
       }}
+      editModalOpen={editOpen}
+      onEditModalClose={() => {
+        setEditOpen(false);
+        setEditingStaff(null);
+        setValues(initialValues);
+        setErrors({});
+      }}
+      editModalTitle="Edit Staff Member"
+      editModalSubtitle="Update user details, status, and assigned locations."
+      editModalIcon={<Pencil size={20} />}
+      editModalContent={() => (
+        <ReusableSlideForm
+          title="Edit Staff Information"
+          subtitle="Update staff record fields and assignment locations."
+          icon={Pencil}
+          fields={sharedStaffFields}
+          values={values}
+          errors={errors}
+          loading={saving}
+          submitLabel="Update Staff"
+          onValueChange={onValueChange}
+          onSubmit={handleUpdateSubmit}
+          onCancel={() => {
+            setEditOpen(false);
+            setEditingStaff(null);
+            setValues(initialValues);
+            setErrors({});
+          }}
+        />
+      )}
+      secondaryModalOpen={viewOpen}
+      onSecondaryModalClose={() => {
+        setViewOpen(false);
+        setViewingStaff(null);
+      }}
+      secondaryModalTitle="Staff Details"
+      secondaryModalSubtitle="Read-only user profile snapshot."
+      secondaryModalIcon={<Eye size={20} />}
+      secondaryModalContent={
+        viewingStaff ? (
+          <div className="space-y-4 text-sm">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Name</p>
+              <p className="font-semibold text-slate-800">{viewingStaff.name}</p>
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Email</p>
+              <p className="font-semibold text-slate-800">{viewingStaff.email}</p>
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Phone</p>
+              <p className="font-semibold text-slate-800">{viewingStaff.phone}</p>
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Role</p>
+              <p className="font-semibold text-slate-800">{String(viewingStaff.role).toUpperCase()}</p>
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Locations</p>
+              <p className="font-semibold text-slate-800">{viewingStaff.locations || "Not assigned"}</p>
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Status</p>
+              <p className="font-semibold text-slate-800">{viewingStaff.status}</p>
+            </div>
+          </div>
+        ) : null
+      }
+      deleteModalProps={{
+        visible: Boolean(deleteTarget),
+        onCancel: () => setDeleteTarget(null),
+        onConfirm: handleDeleteConfirm,
+        title: "Delete Staff Member",
+        subtitle: `Delete ${deleteTarget?.name || "this staff member"}? This action cannot be undone.`,
+      }}
       modalTitle="Add Staff Member"
       modalSubtitle="Use the shared reusable drawer form."
       modalIcon={<UserPlus size={20} />}
@@ -127,22 +362,7 @@ const Staff = () => {
           title="Staff Information"
           subtitle="Create a staff record used in schedule assignment."
           icon={UserPlus}
-          fields={[
-            { name: "name", label: "Full Name", required: true, placeholder: "e.g. Angela Wanjiru" },
-            { name: "email", label: "Email", type: "email", required: true, placeholder: "name@company.com" },
-            { name: "phone_number", label: "Phone Number", required: true, placeholder: "e.g. 0114116073" },
-            {
-              name: "role",
-              label: "Role",
-              type: "select",
-              required: true,
-              options: [
-                { value: "staff", label: "Staff" },
-                { value: "manager", label: "Manager" },
-                { value: "admin", label: "Admin" },
-              ],
-            },
-          ]}
+          fields={sharedStaffFields}
           values={values}
           errors={errors}
           loading={saving}
