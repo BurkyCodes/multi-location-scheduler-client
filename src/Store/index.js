@@ -16,7 +16,6 @@ import preferencesReducer from './Features/preferencesSlice';
 import skillsReducer from './Features/skillsSlice';
 import swapRequestsReducer from './Features/swapRequestsSlice';
 import userRolesReducer from './Features/userRolesSlice';
-import healthReducer from './Features/healthSlice';
 
 export const store = configureStore({
   reducer: {
@@ -37,6 +36,6 @@ export const store = configureStore({
     skills: skillsReducer,
     swapRequests: swapRequestsReducer,
     userRoles: userRolesReducer,
-    health: healthReducer,
+
   },
 });

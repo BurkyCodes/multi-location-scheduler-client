@@ -1,3 +1,5 @@
+import { Cookies } from "./cookies";
+
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
 
 const buildUrl = (path) => `${API_BASE_URL}${path}`;
@@ -14,6 +16,7 @@ const parseJsonSafely = async (response) => {
 
 export const apiRequest = async (path, options = {}) => {
   const token =
+    Cookies.get("access_token") ||
     localStorage.getItem("access_token") ||
     localStorage.getItem("accessToken") ||
     null;

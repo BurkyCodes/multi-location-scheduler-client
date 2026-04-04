@@ -1,7 +1,8 @@
 import { useEffect, useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Button, message, Space } from "antd";
+import { Button, Space } from "antd";
 import { ArrowLeftRight } from "lucide-react";
+import { toast } from "sonner";
 import ModuleLayoutsOne from "../Layouts/ModuleLayoutsOne";
 import { fetchSwapRequests, managerDecisionSwapRequest } from "../Store/Features/swapRequestsSlice";
 import { colTitle } from "../SharedComponents/ColumnComponents/ColumnTitle";
@@ -26,9 +27,9 @@ const Swaps = () => {
   const decide = async (id, approve) => {
     const result = await dispatch(managerDecisionSwapRequest({ id, approve, manager_id: userId }));
     if (managerDecisionSwapRequest.fulfilled.match(result)) {
-      message.success(approve ? "Swap approved" : "Swap rejected");
+      toast.success(approve ? "Swap approved" : "Swap rejected");
     } else {
-      message.error(result?.payload || "Failed to submit decision");
+      toast.error(result?.payload || "Failed to submit decision");
     }
   };
 

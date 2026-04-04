@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Button, Card, Switch, message } from "antd";
+import { Button, Card, Switch } from "antd";
 import { Plus, Settings as SettingsIcon, ShieldCheck } from "lucide-react";
+import { toast } from "sonner";
 import ModuleLayoutsOne from "../Layouts/ModuleLayoutsOne";
 import ReusableSlideForm from "../SharedComponents/Forms/ReusableSlideForm";
 import { createUserRole, fetchUserRoles } from "../Store/Features/userRolesSlice";
@@ -67,11 +68,11 @@ const Settings = () => {
           email_enabled: effectiveEmailEnabled,
           sms_enabled: effectiveSmsEnabled,
         }),
-      );
+    );
     if (upsertNotificationPreference.fulfilled.match(result)) {
-      message.success("Notification preferences updated");
+      toast.success("Notification preferences updated");
     } else {
-      message.error(result?.payload || "Failed to save preferences");
+      toast.error(result?.payload || "Failed to save preferences");
     }
   };
 
@@ -112,11 +113,11 @@ const Settings = () => {
       }),
     );
     if (createUserRole.fulfilled.match(result)) {
-      message.success("Role created");
+      toast.success("Role created");
       setRoleValues(initialRoleValues);
       closeModal();
     } else {
-      message.error(result?.payload || "Failed to create role");
+      toast.error(result?.payload || "Failed to create role");
     }
   };
 

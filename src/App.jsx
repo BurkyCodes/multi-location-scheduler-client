@@ -4,6 +4,7 @@ import { store } from './Store';
 import AppRoutes from './Routes';
 import './App.css';
 import { ConfigProvider } from 'antd';
+import { Toaster } from 'sonner';
 
 const PALETTE = {
   black: "#0B0B0B",
@@ -55,6 +56,7 @@ function App() {
     <Provider store={store}>
       <ConfigProvider theme={theme}>
         <AppRoutes />
+        <Toaster position="top-right" richColors closeButton />
       </ConfigProvider>
     </Provider>
   );

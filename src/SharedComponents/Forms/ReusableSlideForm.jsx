@@ -22,10 +22,6 @@ const SectionHeader = ({ icon, title, subtitle }) => {
       >
         {HeaderIcon ? <HeaderIcon size={16} color="#f6873a" /> : null}
       </div>
-      <div>
-        <div style={{ ...FONT, fontSize: 14, fontWeight: 800, color: "#0f172a" }}>{title}</div>
-        {subtitle ? <div style={{ ...FONT_XS, color: "#64748b" }}>{subtitle}</div> : null}
-      </div>
     </div>
   );
 };

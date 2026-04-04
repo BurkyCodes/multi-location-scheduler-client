@@ -9,14 +9,21 @@ import Staff from "../Pages/Staff";
 import Locations from "../Pages/Locations";
 import Swaps from "../Pages/Swaps";
 import Settings from "../Pages/Settings";
-import { fetchProfile } from "../Store/Features/authSlice";
+import { fetchProfile, verifyAuth } from "../Store/Features/authSlice";
 
 const ProtectedLayout = () => {
   const dispatch = useDispatch();
   const { isAuthenticated, accessToken, user } = useSelector((state) => state.auth);
 
   useEffect(() => {
-    if (accessToken && !user) dispatch(fetchProfile());
+    const hydrateAuth = async () => {
+      if (!accessToken || user) return;
+      const verified = await dispatch(verifyAuth());
+      if (verifyAuth.fulfilled.match(verified)) {
+        dispatch(fetchProfile());
+      }
+    };
+    hydrateAuth();
   }, [accessToken, user, dispatch]);
 
   if (!isAuthenticated) return <Navigate to="/login" replace />;

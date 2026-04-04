@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Button, message } from "antd";
+import { Button } from "antd";
 import { MapPinned, Plus } from "lucide-react";
+import { toast } from "sonner";
 import ModuleLayoutsOne from "../Layouts/ModuleLayoutsOne";
 import ReusableSlideForm from "../SharedComponents/Forms/ReusableSlideForm";
 import { createLocation, fetchLocations } from "../Store/Features/locationsSlice";
@@ -64,11 +65,11 @@ const Locations = () => {
       }),
     );
     if (createLocation.fulfilled.match(result)) {
-      message.success("Location created");
+      toast.success("Location created");
       setValues(initialValues);
       closeModal();
     } else {
-      message.error(result?.payload || "Failed to create location");
+      toast.error(result?.payload || "Failed to create location");
     }
   };
 

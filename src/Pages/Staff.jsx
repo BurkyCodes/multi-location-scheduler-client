@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Button, message } from "antd";
+import { Button } from "antd";
 import { Plus, UserPlus } from "lucide-react";
+import { toast } from "sonner";
 import ModuleLayoutsOne from "../Layouts/ModuleLayoutsOne";
 import ReusableSlideForm from "../SharedComponents/Forms/ReusableSlideForm";
 import { createStaff, fetchStaff } from "../Store/Features/staffSlice";
@@ -12,7 +13,7 @@ import StatusBadge from "../SharedComponents/ColumnComponents/StatusBadge";
 const initialValues = {
   name: "",
   email: "",
-  phone: "",
+  phone_number: "",
   role: "staff",
 };
 
@@ -37,6 +38,7 @@ const Staff = () => {
     if (!values.name.trim()) nextErrors.name = "Name is required";
     if (!values.email.trim()) nextErrors.email = "Email is required";
     if (!/^\S+@\S+\.\S+$/.test(values.email.trim())) nextErrors.email = "Enter a valid email";
+    if (!values.phone_number.trim()) nextErrors.phone_number = "Phone number is required";
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };
@@ -47,7 +49,7 @@ const Staff = () => {
         key: item?._id || item?.id,
         name: item?.name || "Unnamed",
         email: item?.email || "N/A",
-        phone: item?.phone || item?.phone_number || "N/A",
+        phone: item?.phone_number || item?.phone || "N/A",
         role: item?.role_id?.role || item?.role || "staff",
         status: item?.status || "active",
       })),
@@ -61,16 +63,16 @@ const Staff = () => {
       createStaff({
         name: values.name.trim(),
         email: values.email.trim(),
-        phone: values.phone.trim() || undefined,
+        phone_number: values.phone_number.trim(),
         role: values.role,
       }),
     );
     if (createStaff.fulfilled.match(result)) {
-      message.success("Staff member created");
+      toast.success("Staff member created");
       setValues(initialValues);
       closeModal();
     } else {
-      message.error(result?.payload || "Failed to create staff");
+      toast.error(result?.payload || "Failed to create staff");
     }
   };
 
@@ -128,7 +130,7 @@ const Staff = () => {
           fields={[
             { name: "name", label: "Full Name", required: true, placeholder: "e.g. Angela Wanjiru" },
             { name: "email", label: "Email", type: "email", required: true, placeholder: "name@company.com" },
-            { name: "phone", label: "Phone Number", placeholder: "Optional phone number" },
+            { name: "phone_number", label: "Phone Number", required: true, placeholder: "e.g. 0114116073" },
             {
               name: "role",
               label: "Role",

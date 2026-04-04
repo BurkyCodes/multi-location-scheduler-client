@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Button, Card, Input, Typography } from "antd";
-import { LockKeyhole, Mail } from "lucide-react";
+import { LockKeyhole, Mail, Smartphone } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { clearAuthError, fetchProfile, loginUser } from "../Store/Features/authSlice";
+import { clearAuthError, fetchProfile, login } from "../Store/Features/authSlice";
 
 const { Title, Text } = Typography;
 
@@ -12,7 +12,7 @@ const Login = () => {
   const navigate = useNavigate();
   const { loading, error, isAuthenticated } = useSelector((state) => state.auth);
 
-  const [formValues, setFormValues] = useState({ email: "", password: "" });
+  const [formValues, setFormValues] = useState({ identifier: "", password: "" });
   const [formErrors, setFormErrors] = useState({});
 
   useEffect(() => {
@@ -28,8 +28,7 @@ const Login = () => {
 
   const validate = () => {
     const nextErrors = {};
-    if (!formValues.email.trim()) nextErrors.email = "Email is required";
-    if (!/^\S+@\S+\.\S+$/.test(formValues.email.trim())) nextErrors.email = "Enter a valid email";
+    if (!formValues.identifier.trim()) nextErrors.identifier = "Email or phone number is required";
     if (!formValues.password.trim()) nextErrors.password = "Password is required";
     setFormErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
@@ -39,14 +38,16 @@ const Login = () => {
     event.preventDefault();
     if (!validate()) return;
 
+    const identifier = formValues.identifier.trim();
+    const isEmail = identifier.includes("@");
     const result = await dispatch(
-      loginUser({
-        email: formValues.email.trim(),
+      login({
+        ...(isEmail ? { email: identifier } : { phone_number: identifier }),
         password: formValues.password,
       }),
     );
 
-    if (loginUser.fulfilled.match(result)) {
+    if (login.fulfilled.match(result)) {
       await dispatch(fetchProfile());
       navigate("/", { replace: true });
     }
@@ -64,16 +65,16 @@ const Login = () => {
 
         <form onSubmit={onSubmit} className="space-y-4">
           <div>
-            <Text className="text-xs font-bold uppercase tracking-wide text-slate-600">Email</Text>
+            <Text className="text-xs font-bold uppercase tracking-wide text-slate-600">Email or Phone Number</Text>
             <Input
               size="large"
-              prefix={<Mail size={14} color="#94a3b8" />}
-              placeholder="you@company.com"
-              value={formValues.email}
-              onChange={(event) => onValueChange("email", event.target.value)}
+              prefix={formValues.identifier.includes("@") ? <Mail size={14} color="#94a3b8" /> : <Smartphone size={14} color="#94a3b8" />}
+              placeholder="you@company.com or 2547xxxxxxx"
+              value={formValues.identifier}
+              onChange={(event) => onValueChange("identifier", event.target.value)}
               className="mt-1 rounded-xl"
             />
-            {formErrors.email ? <p className="text-xs text-rose-500 mt-1">{formErrors.email}</p> : null}
+            {formErrors.identifier ? <p className="text-xs text-rose-500 mt-1">{formErrors.identifier}</p> : null}
           </div>
 
           <div>
