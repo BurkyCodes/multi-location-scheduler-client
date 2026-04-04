@@ -1,121 +1,63 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import React from 'react';
+import { Provider } from 'react-redux';
+import { store } from './Store';
+import AppRoutes from './Routes';
+import './App.css';
+import { ConfigProvider } from 'antd';
+
+const PALETTE = {
+  black: "#0B0B0B",
+  p1: "#533c2e",
+  p2: "#a65430",
+  p3: "#f6873a",
+  p4: "#fcbc5c",
+  p5: "#ffd799",
+};
+
+// Custom Ant Design theme to match black + coral branding
+const theme = {
+  token: {
+    colorPrimary: PALETTE.p3,
+    borderRadius: 12,
+    fontFamily: "'Montserrat', sans-serif",
+    colorBgLayout: "#ffffff",
+    colorTextHeading: PALETTE.black,
+    colorText: PALETTE.black,
+    colorBgContainer: "#ffffff",
+    colorBorder: "#e2e8f0",
+  },
+  components: {
+    Button: {
+      borderRadius: 12,
+      fontWeight: 700,
+      colorPrimary: PALETTE.p3,
+      colorPrimaryHover: PALETTE.p3,
+      colorPrimaryActive: PALETTE.p3,
+      primaryColor: "#ffffff",
+    },
+    Card: {
+      borderRadiusLG: 20,
+      colorBgContainer: "#ffffff",
+    },
+    Table: {
+      headerBg: "#f8fafc",
+      headerColor: "#64748b",
+      headerSplitColor: 'transparent',
+      colorBgContainer: "#ffffff",
+      colorText: PALETTE.black,
+      borderColor: "#f1f5f9",
+    }
+  }
+};
 
 function App() {
-  const [count, setCount] = useState(0)
-
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+    <Provider store={store}>
+      <ConfigProvider theme={theme}>
+        <AppRoutes />
+      </ConfigProvider>
+    </Provider>
+  );
 }
 
-export default App
+export default App;
