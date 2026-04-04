@@ -55,6 +55,7 @@ const MainLayout = () => {
   const allMenuItems = [
     { key: "/", icon: <LayoutDashboard size={20} />, label: "Dashboard" },
     { key: "/schedule", icon: <Calendar size={20} />, label: "Schedules", roles: ["admin", "manager"] },
+    { key: "/shifts", icon: <Calendar size={20} />, label: "Shifts", roles: ["admin", "manager"] },
     { key: "/assignments", icon: <ClipboardCheck size={20} />, label: "Assignments", roles: ["admin", "manager"] },
     { key: "/swaps", icon: <ArrowLeftRight size={20} />, label: "Shift Swaps" },
     { key: "/availability", icon: <Clock3 size={20} />, label: "Availability", roles: ["staff"] },

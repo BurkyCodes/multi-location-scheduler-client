@@ -5,6 +5,7 @@ import MainLayout from "../Layouts/MainLayout";
 import Dashboard from "../Pages/Dashboard";
 import Login from "../Pages/Login";
 import Schedules from "../Pages/Schedules";
+import Shifts from "../Pages/Shifts";
 import Staff from "../Pages/Staff";
 import Locations from "../Pages/Locations";
 import Swaps from "../Pages/Swaps";
@@ -58,6 +59,10 @@ const router = createBrowserRouter([
       {
         element: <RoleRoute roles={["admin", "manager"]} />,
         children: [{ path: "schedule", element: <Schedules /> }],
+      },
+      {
+        element: <RoleRoute roles={["admin", "manager"]} />,
+        children: [{ path: "shifts", element: <Shifts /> }],
       },
       {
         element: <RoleRoute roles={["admin"]} />,

@@ -1,26 +1,279 @@
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Button } from "antd";
-import { Eye, Pencil, Plus, Trash2, UserPlus } from "lucide-react";
+import { Check, Eye, MapPin, Pencil, Plus, Trash2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import ModuleLayoutsOne from "../Layouts/ModuleLayoutsOne";
-import ReusableSlideForm from "../SharedComponents/Forms/ReusableSlideForm";
 import { createStaff, deleteStaff, fetchStaff, updateStaff } from "../Store/Features/staffSlice";
 import { fetchLocations } from "../Store/Features/locationsSlice";
 import { colTitle } from "../SharedComponents/ColumnComponents/ColumnTitle";
 import ColumnData from "../SharedComponents/ColumnComponents/ColumnData";
 import StatusBadge from "../SharedComponents/ColumnComponents/StatusBadge";
 
+const FONT = { fontFamily: "'Montserrat', sans-serif" };
+const FONT_SM = { ...FONT, fontSize: 12 };
+const FONT_XS = { ...FONT, fontSize: 11 };
+
 const initialValues = {
   name: "",
   email: "",
   phone_number: "",
   role: "staff",
-  location_ids: [],
+  location_id: "",
   status: "active",
 };
 
 const getId = (value) => (typeof value === "object" ? value?._id || value?.id : value);
+
+const Lbl = ({ children, labelHint }) => (
+  <div style={{ marginBottom: 6 }}>
+    <div style={{ ...FONT_SM, fontWeight: 700, color: "#374151" }}>{children}</div>
+    {labelHint ? <div style={{ ...FONT_XS, color: "#94a3b8", marginTop: 2 }}>{labelHint}</div> : null}
+  </div>
+);
+
+const PillToggle = ({ options, value, onChange, disabled, fullWidth }) => (
+  <div
+    style={{
+      display: "grid",
+      gridTemplateColumns: fullWidth ? "1fr" : `repeat(${Math.max(options.length, 1)}, 1fr)`,
+      gap: 8,
+    }}
+  >
+    {options.map((opt) => {
+      const active = opt.value === value;
+      const Icon = opt.icon;
+      return (
+        <button
+          key={opt.value}
+          type="button"
+          disabled={disabled}
+          onClick={() => !disabled && onChange(opt.value)}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+            padding: "11px 14px",
+            borderRadius: 9,
+            textAlign: "left",
+            border: `1.5px solid ${active ? "#93c5fd" : "#e2e8f0"}`,
+            background: active ? "#eff6ff" : "#fafbfc",
+            cursor: disabled ? "not-allowed" : "pointer",
+            outline: "none",
+            transition: "all 0.15s",
+            boxShadow: active ? "0 0 0 3px rgba(37,99,235,0.1)" : "none",
+            opacity: disabled ? 0.55 : 1,
+          }}
+        >
+          {Icon ? (
+            <div
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 7,
+                flexShrink: 0,
+                background: active ? "#dbeafe" : "#f1f5f9",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Icon size={14} color={active ? "#2563eb" : "#94a3b8"} />
+            </div>
+          ) : null}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div
+              style={{
+                ...FONT_SM,
+                fontWeight: 700,
+                color: active ? "#1e40af" : "#374151",
+                lineHeight: 1.2,
+              }}
+            >
+              {opt.label}
+            </div>
+            {opt.desc ? (
+              <div
+                style={{
+                  ...FONT_XS,
+                  color: active ? "rgba(37,99,235,0.6)" : "#94a3b8",
+                  marginTop: 2,
+                  lineHeight: 1.2,
+                }}
+              >
+                {opt.desc}
+              </div>
+            ) : null}
+          </div>
+          <div
+            style={{
+              width: 15,
+              height: 15,
+              borderRadius: "50%",
+              flexShrink: 0,
+              border: `2px solid ${active ? "#2563eb" : "#e2e8f0"}`,
+              background: active ? "#2563eb" : "#fff",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            {active ? <Check size={7} color="#fff" strokeWidth={3.5} /> : null}
+          </div>
+        </button>
+      );
+    })}
+  </div>
+);
+
+const inputStyle = (hasError) => ({
+  ...FONT_SM,
+  width: "100%",
+  height: 40,
+  borderRadius: 8,
+  border: `1.5px solid ${hasError ? "#fecaca" : "#e2e8f0"}`,
+  padding: "0 12px",
+  color: "#1e293b",
+  background: hasError ? "#fef2f2" : "#fff",
+  outline: "none",
+});
+
+const StaffForm = ({
+  mode = "create",
+  title,
+  subtitle,
+  submitLabel,
+  loading,
+  values,
+  errors,
+  onValueChange,
+  onSubmit,
+  onCancel,
+  locationOptions,
+}) => (
+  <form onSubmit={onSubmit} style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+    <div style={{ flex: 1, overflowY: "auto", padding: 24 }}>
+      <div style={{ marginBottom: 18 }}>
+        <div style={{ ...FONT, fontSize: 14, fontWeight: 800, color: "#0f172a" }}>{title}</div>
+        <div style={{ ...FONT_XS, color: "#64748b", marginTop: 3 }}>{subtitle}</div>
+      </div>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div>
+          <Lbl>Full Name</Lbl>
+          <input
+            value={values.name}
+            onChange={(event) => onValueChange("name", event.target.value)}
+            style={inputStyle(Boolean(errors.name))}
+            placeholder="e.g. Angela Wanjiru"
+          />
+          {errors.name ? <div style={{ ...FONT_XS, color: "#ef4444", marginTop: 4 }}>{errors.name}</div> : null}
+        </div>
+
+        <div>
+          <Lbl>Email</Lbl>
+          <input
+            type="email"
+            value={values.email}
+            onChange={(event) => onValueChange("email", event.target.value)}
+            style={inputStyle(Boolean(errors.email))}
+            placeholder="name@company.com"
+          />
+          {errors.email ? <div style={{ ...FONT_XS, color: "#ef4444", marginTop: 4 }}>{errors.email}</div> : null}
+        </div>
+
+        {mode === "create" ? (
+          <div>
+            <Lbl>Phone Number</Lbl>
+            <input
+              value={values.phone_number}
+              onChange={(event) => onValueChange("phone_number", event.target.value)}
+              style={inputStyle(Boolean(errors.phone_number))}
+              placeholder="e.g. 0114116073"
+            />
+            {errors.phone_number ? (
+              <div style={{ ...FONT_XS, color: "#ef4444", marginTop: 4 }}>{errors.phone_number}</div>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div>
+          <Lbl>Role</Lbl>
+          <select
+            value={values.role}
+            onChange={(event) => onValueChange("role", event.target.value)}
+            style={inputStyle(false)}
+          >
+            <option value="staff">Staff</option>
+            <option value="manager">Manager</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+
+        <div>
+          <Lbl labelHint="Assign exactly one location for now">Assigned Location</Lbl>
+          <PillToggle
+            fullWidth
+            options={locationOptions}
+            value={values.location_id}
+            onChange={(v) => onValueChange("location_id", v)}
+          />
+          {errors.location_id ? (
+            <div style={{ ...FONT_XS, color: "#ef4444", marginTop: 4 }}>{errors.location_id}</div>
+          ) : null}
+        </div>
+      </div>
+    </div>
+
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        gap: 10,
+        padding: "14px 24px",
+        borderTop: "1px solid #f1f5f9",
+        background: "#fff",
+      }}
+    >
+      <button
+        type="button"
+        onClick={onCancel}
+        style={{
+          ...FONT_SM,
+          height: 40,
+          borderRadius: 8,
+          border: "1.5px solid #e2e8f0",
+          background: "#fff",
+          color: "#374151",
+          padding: "0 16px",
+          fontWeight: 700,
+          cursor: "pointer",
+        }}
+      >
+        Cancel
+      </button>
+      <button
+        type="submit"
+        disabled={loading}
+        style={{
+          ...FONT_SM,
+          height: 40,
+          borderRadius: 8,
+          border: "none",
+          background: loading ? "#fdba74" : "#f6873a",
+          color: "#fff",
+          padding: "0 20px",
+          fontWeight: 700,
+          cursor: loading ? "not-allowed" : "pointer",
+          boxShadow: "0 2px 8px rgba(246,135,58,0.25)",
+        }}
+      >
+        {loading ? "Saving..." : submitLabel}
+      </button>
+    </div>
+  </form>
+);
 
 const Staff = () => {
   const dispatch = useDispatch();
@@ -50,7 +303,8 @@ const Staff = () => {
     if (!payload.name.trim()) nextErrors.name = "Name is required";
     if (!payload.email.trim()) nextErrors.email = "Email is required";
     if (!/^\S+@\S+\.\S+$/.test(payload.email.trim())) nextErrors.email = "Enter a valid email";
-    if (!payload.phone_number.trim()) nextErrors.phone_number = "Phone number is required";
+    if (!editingStaff && !payload.phone_number.trim()) nextErrors.phone_number = "Phone number is required";
+    if (!payload.location_id) nextErrors.location_id = "Select one location";
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };
@@ -61,6 +315,17 @@ const Staff = () => {
         acc[String(getId(location))] = location?.name || "Unnamed Location";
         return acc;
       }, {}),
+    [locations],
+  );
+
+  const locationOptions = useMemo(
+    () =>
+      locations.map((location) => ({
+        value: String(getId(location)),
+        label: location?.name || "Unnamed Location",
+        icon: MapPin,
+        desc: `${location?.code || "No code"} - ${location?.timezone || "No timezone"}`,
+      })),
     [locations],
   );
 
@@ -91,7 +356,7 @@ const Staff = () => {
         phone_number: values.phone_number.trim(),
         role: values.role,
         status: values.status,
-        location_ids: values.location_ids,
+        location_ids: values.location_id ? [values.location_id] : [],
       }),
     );
     if (createStaff.fulfilled.match(result)) {
@@ -105,6 +370,7 @@ const Staff = () => {
 
   const openEditModal = (record) => {
     const item = record.raw;
+    const firstLocationId = (item?.location_ids || []).map((locationId) => String(getId(locationId))).find(Boolean) || "";
     setEditingStaff(record);
     setErrors({});
     setValues({
@@ -113,7 +379,7 @@ const Staff = () => {
       phone_number: item?.phone_number || "",
       role: item?.role_id?.role || item?.role || "staff",
       status: item?.status || "active",
-      location_ids: (item?.location_ids || []).map((locationId) => String(getId(locationId))).filter(Boolean),
+      location_id: firstLocationId,
     });
     setEditOpen(true);
   };
@@ -128,10 +394,8 @@ const Staff = () => {
         id: editingStaff.key,
         name: values.name.trim(),
         email: values.email.trim(),
-        phone_number: values.phone_number.trim(),
         role: values.role,
-        status: values.status,
-        location_ids: values.location_ids,
+        location_ids: values.location_id ? [values.location_id] : [],
       }),
     );
 
@@ -156,49 +420,6 @@ const Staff = () => {
       toast.error(result?.payload || "Failed to delete staff");
     }
   };
-
-  const locationOptions = useMemo(
-    () =>
-      locations.map((location) => ({
-        value: String(getId(location)),
-        label: location?.name || "Unnamed Location",
-      })),
-    [locations],
-  );
-
-  const sharedStaffFields = [
-    { name: "name", label: "Full Name", required: true, placeholder: "e.g. Angela Wanjiru" },
-    { name: "email", label: "Email", type: "email", required: true, placeholder: "name@company.com" },
-    { name: "phone_number", label: "Phone Number", required: true, placeholder: "e.g. 0114116073" },
-    {
-      name: "role",
-      label: "Role",
-      type: "select",
-      required: true,
-      options: [
-        { value: "staff", label: "Staff" },
-        { value: "manager", label: "Manager" },
-        { value: "admin", label: "Admin" },
-      ],
-    },
-    {
-      name: "status",
-      label: "Status",
-      type: "select",
-      required: true,
-      options: [
-        { value: "active", label: "Active" },
-        { value: "deactivated", label: "Deactivated" },
-      ],
-    },
-    {
-      name: "location_ids",
-      label: "Assigned Locations",
-      type: "multiselect",
-      options: locationOptions,
-      hint: "Hold Ctrl/Cmd to select multiple locations",
-    },
-  ];
 
   const columns = [
     {
@@ -287,18 +508,17 @@ const Staff = () => {
         setErrors({});
       }}
       editModalTitle="Edit Staff Member"
-      editModalSubtitle="Update user details, status, and assigned locations."
+      editModalSubtitle="Update full name, email, role, and assigned location."
       editModalIcon={<Pencil size={20} />}
       editModalContent={() => (
-        <ReusableSlideForm
+        <StaffForm
+          mode="edit"
           title="Edit Staff Information"
-          subtitle="Update staff record fields and assignment locations."
-          icon={Pencil}
-          fields={sharedStaffFields}
+          subtitle="Only full name, email, role, and location can be edited."
+          submitLabel="Update Staff"
+          loading={saving}
           values={values}
           errors={errors}
-          loading={saving}
-          submitLabel="Update Staff"
           onValueChange={onValueChange}
           onSubmit={handleUpdateSubmit}
           onCancel={() => {
@@ -307,6 +527,7 @@ const Staff = () => {
             setValues(initialValues);
             setErrors({});
           }}
+          locationOptions={locationOptions}
         />
       )}
       secondaryModalOpen={viewOpen}
@@ -355,21 +576,21 @@ const Staff = () => {
         subtitle: `Delete ${deleteTarget?.name || "this staff member"}? This action cannot be undone.`,
       }}
       modalTitle="Add Staff Member"
-      modalSubtitle="Use the shared reusable drawer form."
+      modalSubtitle="Create a staff profile and assign one location."
       modalIcon={<UserPlus size={20} />}
       modalContent={({ closeModal }) => (
-        <ReusableSlideForm
+        <StaffForm
+          mode="create"
           title="Staff Information"
           subtitle="Create a staff record used in schedule assignment."
-          icon={UserPlus}
-          fields={sharedStaffFields}
+          submitLabel="Create Staff"
+          loading={saving}
           values={values}
           errors={errors}
-          loading={saving}
-          submitLabel="Create Staff"
           onValueChange={onValueChange}
           onSubmit={(event) => handleSubmit(event, closeModal)}
           onCancel={closeModal}
+          locationOptions={locationOptions}
         />
       )}
     />
