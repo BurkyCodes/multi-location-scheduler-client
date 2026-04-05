@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Button, Table } from "antd";
+import { Button } from "antd";
+import { toast } from "sonner";
 import {
   CalendarOutlined,
   ClockCircleOutlined,
@@ -14,7 +15,15 @@ import ModuleLayoutsOne from "../Layouts/ModuleLayoutsOne";
 import { fetchShifts } from "../Store/Features/shiftsSlice";
 import { fetchStaff } from "../Store/Features/staffSlice";
 import { fetchLocations } from "../Store/Features/locationsSlice";
-import { fetchAssignments } from "../Store/Features/assignmentsSlice";
+import {
+  clockInAssignmentQuick,
+  clockOutAssignmentQuick,
+  fetchAssignments,
+  fetchMyShiftTracking,
+  pauseAssignmentQuick,
+  resumeAssignmentQuick,
+} from "../Store/Features/assignmentsSlice";
+import { createSwapRequest, fetchSwapRequests } from "../Store/Features/swapRequestsSlice";
 import { fetchAuditLogs } from "../Store/Features/auditLogsSlice";
 import { fetchAvailabilityByUser } from "../Store/Features/availabilitySlice";
 import { colTitle } from "../SharedComponents/ColumnComponents/ColumnTitle";
@@ -23,13 +32,32 @@ import StatusBadge from "../SharedComponents/ColumnComponents/StatusBadge";
 import StatCard from "../SharedComponents/StatCard";
 import ActionAuditTable from "../SharedComponents/ActionAuditTable";
 import { hasRole } from "../utils/roles";
-import ListView from "../SharedComponents/Calendar/ListView";
 
 const formatDateTime = (value) => {
   if (!value) return "N/A";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "N/A";
   return date.toLocaleString();
+};
+
+const getId = (value) => (typeof value === "object" ? value?._id || value?.id : value);
+const getAssignmentId = (assignment) =>
+  String(
+    assignment?._id ||
+      assignment?.assignment_id ||
+      assignment?.id ||
+      assignment?.assignment?.id ||
+      "",
+  );
+
+const getActionableStatus = (assignment, activeAssignmentId) => {
+  const currentStatus = String(assignment?.status || "assigned").toLowerCase();
+  const id = String(getId(assignment) || "");
+  const isActive = id && activeAssignmentId && id === activeAssignmentId;
+  if (currentStatus === "paused") return "paused";
+  if (currentStatus === "completed" || currentStatus === "clocked_out") return "completed";
+  if (currentStatus === "in-progress" || currentStatus === "clocked_in" || isActive) return "in-progress";
+  return "assigned";
 };
 
 const getShiftStatus = (record) => {
@@ -52,6 +80,10 @@ const Dashboard = () => {
   const { list: assignments, loading: assignmentsLoading } = useSelector(
     (state) => state.assignments,
   );
+  const myTracking = useSelector((state) => state.assignments.myTracking);
+  const myTrackingLoading = useSelector((state) => state.assignments.myTrackingLoading);
+  const quickActionLoading = useSelector((state) => state.assignments.quickActionLoading);
+  const { list: swapRequests, saving: swapSaving } = useSelector((state) => state.swapRequests);
   const { list: auditLogs } = useSelector((state) => state.auditLogs);
   const userAvailability = useSelector((state) => state.availability.byUser[currentUserId]);
 
@@ -59,6 +91,10 @@ const Dashboard = () => {
     dispatch(fetchShifts());
     dispatch(fetchLocations());
     dispatch(fetchAssignments());
+    if (isStaffUser) {
+      dispatch(fetchMyShiftTracking());
+      dispatch(fetchSwapRequests());
+    }
     if (!isStaffUser) {
       dispatch(fetchStaff());
       dispatch(fetchAuditLogs({ limit: 10 }));
@@ -121,37 +157,6 @@ const Dashboard = () => {
       };
     });
   }, [assignments, shifts, staff, locations]);
-
-  const staffRows = useMemo(() => {
-    const mine = assignments.filter((assignment) => {
-      const assignmentUserId = assignment?.user_id?._id || assignment?.user_id?.id || assignment?.user_id;
-      return String(assignmentUserId) === String(currentUserId);
-    });
-
-    return mine.map((assignment) => {
-      const shift = assignment.shift_id || {};
-      const location = shift.location_id || {};
-      const locationName =
-        location.name || locations.find((loc) => `${loc._id}` === `${shift.location_id}`)?.name || "Unknown Location";
-
-      return {
-        key: assignment._id,
-        shiftId: shift._id || assignment.shift_id,
-        details: {
-          location: locationName,
-          skill: shift.required_skill_id?.name || shift.required_skill_id?.code || "General Staff",
-        },
-        time: {
-          range: `${formatDateTime(shift.starts_at_utc)} - ${formatDateTime(shift.ends_at_utc)}`,
-          timezone: shift.location_timezone || "N/A",
-        },
-        status: getShiftStatus({
-          status: shift.status,
-          assignmentStatus: assignment.status,
-        }),
-      };
-    });
-  }, [assignments, currentUserId, locations]);
 
   const statCards = useMemo(() => {
     const activeShifts = shifts.filter((item) => item.status === "open").length;
@@ -299,32 +304,94 @@ const Dashboard = () => {
     return `${windows.length} recurring window(s), ${time} (${timezone})`;
   }, [userAvailability]);
 
-  const staffColumns = [
-    {
-      title: colTitle("Assigned Location"),
-      dataIndex: "details",
-      key: "details",
-      render: (details) => <ColumnData text={details.location} description={details.skill} />,
-    },
-    {
-      title: colTitle("Shift Schedule"),
-      dataIndex: "time",
-      key: "time",
-      render: (time) => (
-        <ColumnData
-          text={time.range}
-          description={time.timezone}
-          icon={<ClockCircleOutlined className="text-slate-500 text-[10px]" />}
-        />
-      ),
-    },
-    {
-      title: colTitle("Status"),
-      dataIndex: "status",
-      key: "status",
-      render: (status) => <StatusBadge status={status} />,
-    },
-  ];
+  const activeAssignment = myTracking?.active_assignment || null;
+  const activeShift = activeAssignment?.shift || null;
+  const activeAssignmentId = getAssignmentId(activeAssignment);
+
+  const trackedAssignments = Array.isArray(myTracking?.assignments) ? myTracking.assignments : [];
+  const assignedShiftCards = trackedAssignments.map((assignment) => {
+    const shift = assignment?.shift_id || assignment?.shift || {};
+    const location = shift?.location_id || shift?.location || {};
+    const status = getActionableStatus(assignment, activeAssignmentId);
+    return {
+      id: getAssignmentId(assignment),
+      shiftId: String(getId(shift)),
+      title: shift?.title || shift?.name || "Assigned shift",
+      location: location?.name || "Unknown location",
+      start: shift?.starts_at_utc || assignment?.starts_at_utc,
+      end: shift?.ends_at_utc || assignment?.ends_at_utc,
+      timezone: shift?.location_timezone || shift?.timezone || "EAT",
+      status,
+    };
+  });
+
+  const myPendingSwapCount = useMemo(
+    () =>
+      (swapRequests || []).filter((request) => {
+        const requesterId = String(getId(request?.requester_id) || request?.requester_id || "");
+        return requesterId === String(currentUserId || "") && String(request?.status || "").toLowerCase().includes("pending");
+      }).length,
+    [swapRequests, currentUserId],
+  );
+
+  const runQuickAction = async (action, assignmentIdOverride) => {
+    const assignmentId = assignmentIdOverride || activeAssignment?.assignment_id;
+    if (!assignmentId) {
+      toast.error("No active assignment available for this action");
+      return;
+    }
+
+    let result;
+
+    if (action === "clock_in") {
+      result = await dispatch(clockInAssignmentQuick({ assignmentId }));
+    } else if (action === "pause") {
+      result = await dispatch(pauseAssignmentQuick({ assignmentId, reason: "Break" }));
+    } else if (action === "resume") {
+      result = await dispatch(resumeAssignmentQuick({ assignmentId }));
+    } else if (action === "clock_out") {
+      result = await dispatch(clockOutAssignmentQuick({ assignmentId }));
+    } else {
+      return;
+    }
+
+    const fulfilled =
+      clockInAssignmentQuick.fulfilled.match(result) ||
+      pauseAssignmentQuick.fulfilled.match(result) ||
+      resumeAssignmentQuick.fulfilled.match(result) ||
+      clockOutAssignmentQuick.fulfilled.match(result);
+
+    if (!fulfilled) {
+      const message =
+        (typeof result?.payload === "string" && result.payload) ||
+        result?.payload?.message ||
+        "Action failed";
+      toast.error(message);
+      return;
+    }
+
+    toast.success("Shift action updated");
+    dispatch(fetchMyShiftTracking());
+    dispatch(fetchAssignments());
+  };
+
+  const requestSwap = async (assignment) => {
+    if (!assignment?.shiftId || !assignment?.id || !currentUserId) return;
+    const result = await dispatch(
+      createSwapRequest({
+        type: "swap",
+        requester_id: currentUserId,
+        from_assignment_id: assignment.id,
+        note: "Requested from staff dashboard",
+      }),
+    );
+    if (createSwapRequest.fulfilled.match(result)) {
+      toast.success("Swap request submitted");
+      dispatch(fetchSwapRequests());
+    } else {
+      toast.error(result?.payload || "Failed to request swap");
+    }
+  };
 
   if (isStaffUser) {
     return (
@@ -332,10 +399,12 @@ const Dashboard = () => {
         title="My Shift Dashboard"
         subtitle="Your assigned shifts and current availability profile."
         tableTitle="My Assigned Shifts"
-        totalRecords={staffRows.length}
-        enableListViewToggle
-        tableHeaderBadges={[{ text: `${staffRows.length} assigned shifts` }]}
-        tableContent={({ viewType }) => (
+        totalRecords={assignedShiftCards.length}
+        tableHeaderBadges={[
+          { text: `${assignedShiftCards.length} assigned shifts` },
+          { text: `${myPendingSwapCount} pending swap requests` },
+        ]}
+        tableContent={() => (
           <div>
             <div className="px-6 pt-4">
               <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
@@ -344,25 +413,124 @@ const Dashboard = () => {
                 </div>
                 <div className="text-sm font-semibold text-slate-800">{availabilitySummary}</div>
               </div>
+              <div className="mt-3 rounded-xl border border-blue-100 bg-blue-50 p-4">
+                <div className="text-xs font-bold uppercase tracking-wide text-blue-700 mb-1">
+                  Quick Actions
+                </div>
+                <div className="text-sm font-semibold text-slate-800 mb-3">
+                  {activeShift
+                    ? `${activeShift.location?.name || "Assigned location"} | ${formatDateTime(
+                        activeShift.starts_at_utc,
+                      )} - ${formatDateTime(activeShift.ends_at_utc)}`
+                    : "No active shift at the moment"}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    size="small"
+                    type="primary"
+                    loading={quickActionLoading}
+                    disabled={!activeAssignment?.can_clock_in}
+                    onClick={() => runQuickAction("clock_in", getAssignmentId(activeAssignment))}
+                  >
+                    Clock In
+                  </Button>
+                  <Button
+                    size="small"
+                    loading={quickActionLoading}
+                    disabled={!activeAssignment?.can_pause}
+                    onClick={() => runQuickAction("pause", getAssignmentId(activeAssignment))}
+                  >
+                    Pause
+                  </Button>
+                  <Button
+                    size="small"
+                    loading={quickActionLoading}
+                    disabled={!activeAssignment?.can_resume}
+                    onClick={() => runQuickAction("resume", getAssignmentId(activeAssignment))}
+                  >
+                    Resume
+                  </Button>
+                  <Button
+                    size="small"
+                    danger
+                    loading={quickActionLoading}
+                    disabled={!activeAssignment?.can_clock_out}
+                    onClick={() => runQuickAction("clock_out", getAssignmentId(activeAssignment))}
+                  >
+                    Clock Out
+                  </Button>
+                </div>
+              </div>
             </div>
-            {viewType === "table" ? (
-              <Table
-                columns={staffColumns}
-                dataSource={staffRows}
-                loading={assignmentsLoading || shiftsLoading}
-                pagination={false}
-                size="middle"
-                rowClassName={() => "transition-colors cursor-pointer"}
-                scroll={{ x: 900, y: 520 }}
-              />
-            ) : (
-              <ListView
-                columns={staffColumns}
-                dataSource={staffRows}
-                rowKey="key"
-                loading={assignmentsLoading || shiftsLoading}
-              />
-            )}
+            <div className="p-6">
+              {myTrackingLoading ? (
+                <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm font-semibold text-slate-500">
+                  Loading assigned shifts...
+                </div>
+              ) : assignedShiftCards.length === 0 ? (
+                <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm font-semibold text-slate-500">
+                  No assigned shifts found.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                  {assignedShiftCards.map((shift) => (
+                    <div key={shift.id} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{shift.location}</p>
+                          <h3 className="text-lg font-black text-slate-900">{shift.title}</h3>
+                          <p className="text-xs text-slate-500 mt-1">{shift.timezone}</p>
+                        </div>
+                        <StatusBadge status={shift.status} />
+                      </div>
+                      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <div className="rounded-xl bg-slate-50 p-3">
+                          <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Starts</p>
+                          <p className="text-sm font-semibold text-slate-900">{formatDateTime(shift.start)}</p>
+                        </div>
+                        <div className="rounded-xl bg-slate-50 p-3">
+                          <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Ends</p>
+                          <p className="text-sm font-semibold text-slate-900">{formatDateTime(shift.end)}</p>
+                        </div>
+                      </div>
+                      <div className="mt-4 rounded-2xl border border-slate-200 p-3">
+                        <p className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-500">Quick Actions</p>
+                        <div className="flex flex-wrap gap-2">
+                          {shift.status === "assigned" ? (
+                            <Button size="small" type="primary" loading={quickActionLoading} onClick={() => runQuickAction("clock_in", shift.id)}>
+                              Clock In
+                            </Button>
+                          ) : null}
+                          {shift.status === "in-progress" ? (
+                            <>
+                              <Button size="small" loading={quickActionLoading} onClick={() => runQuickAction("pause", shift.id)}>
+                                Pause
+                              </Button>
+                              <Button size="small" danger loading={quickActionLoading} onClick={() => runQuickAction("clock_out", shift.id)}>
+                                Clock Out
+                              </Button>
+                            </>
+                          ) : null}
+                          {shift.status === "paused" ? (
+                            <>
+                              <Button size="small" type="primary" loading={quickActionLoading} onClick={() => runQuickAction("resume", shift.id)}>
+                                Resume
+                              </Button>
+                              <Button size="small" danger loading={quickActionLoading} onClick={() => runQuickAction("clock_out", shift.id)}>
+                                Clock Out
+                              </Button>
+                            </>
+                          ) : null}
+                          <Button size="small" loading={swapSaving} onClick={() => requestSwap(shift)}>
+                            Request Swap
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
       />

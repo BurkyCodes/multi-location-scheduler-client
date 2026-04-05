@@ -13,6 +13,8 @@ import {
   LogOut,
   Clock3,
   ClipboardCheck,
+  BadgeCheck,
+  SlidersHorizontal,
 } from "lucide-react";
 import {CoffeeOutlined} from "@ant-design/icons";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
@@ -56,11 +58,14 @@ const MainLayout = () => {
     { key: "/", icon: <LayoutDashboard size={20} />, label: "Dashboard" },
     { key: "/schedule", icon: <Calendar size={20} />, label: "Schedules", roles: ["admin", "manager"] },
     { key: "/shifts", icon: <Calendar size={20} />, label: "Shifts", roles: ["admin", "manager"] },
-    { key: "/assignments", icon: <ClipboardCheck size={20} />, label: "Assignments", roles: ["admin", "manager"] },
+    { key: "/assignments", icon: <ClipboardCheck size={20} />, label: "Assignments", roles: ["manager"] },
+    { key: "/employee-hours", icon: <Clock3 size={20} />, label: "Employee Hours", roles: ["admin", "manager"] },
     { key: "/swaps", icon: <ArrowLeftRight size={20} />, label: "Shift Swaps" },
     { key: "/availability", icon: <Clock3 size={20} />, label: "Availability", roles: ["staff"] },
+    { key: "/staff-preferences", icon: <SlidersHorizontal size={20} />, label: "My Preferences", roles: ["staff"] },
     { key: "/staff", icon: <Users size={20} />, label: "Staff Management", roles: ["admin"] },
     { key: "/locations", icon: <MapPin size={20} />, label: "Locations", roles: ["admin", "manager"] },
+    { key: "/certifications", icon: <BadgeCheck size={20} />, label: "Certifications", roles: ["admin", "manager", "staff"] },
   ];
 
   const menuItems = allMenuItems.filter((item) => {

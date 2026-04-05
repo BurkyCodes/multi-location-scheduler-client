@@ -18,11 +18,22 @@ import StatusBadge from "../SharedComponents/ColumnComponents/StatusBadge";
 const initialValues = {
   name: "",
   code: "",
+  timezone: "EAT",
 };
 
 const locationEditableFields = [
   { name: "name", label: "Location Name", required: true, placeholder: "e.g. Westlands Branch" },
   { name: "code", label: "Code", required: true, placeholder: "e.g. WST-01" },
+  {
+    name: "timezone",
+    label: "Timezone",
+    type: "select",
+    required: true,
+    options: [
+      { value: "EAT", label: "EAT (UTC+3)" },
+      { value: "PST", label: "PST (UTC-8 / -7 DST)" },
+    ],
+  },
 ];
 
 const toAddressSummary = (address = {}) =>
@@ -30,15 +41,22 @@ const toAddressSummary = (address = {}) =>
     .filter(Boolean)
     .join(", ");
 
+const normalizeTimezoneCode = (value) => {
+  const v = String(value || "").trim().toUpperCase();
+  if (v === "PST" || v === "AMERICA/LOS_ANGELES") return "PST";
+  return "EAT";
+};
+
 const mapLocationToForm = (item) => ({
   name: item?.name || "",
   code: item?.code || "",
+  timezone: normalizeTimezoneCode(item?.timezone),
 });
 
 const buildCreatePayload = (formValues) => ({
   name: formValues.name.trim(),
   code: formValues.code.trim().toUpperCase(),
-  timezone: "Africa/Nairobi",
+  timezone: normalizeTimezoneCode(formValues.timezone),
   is_active: true,
   address: {},
 });
@@ -46,6 +64,7 @@ const buildCreatePayload = (formValues) => ({
 const buildUpdatePayload = (formValues) => ({
   name: formValues.name.trim(),
   code: formValues.code.trim().toUpperCase(),
+  timezone: normalizeTimezoneCode(formValues.timezone),
 });
 
 const Locations = () => {
@@ -72,6 +91,7 @@ const Locations = () => {
     const nextErrors = {};
     if (!payload.name.trim()) nextErrors.name = "Location name is required";
     if (!payload.code.trim()) nextErrors.code = "Location code is required";
+    if (!payload.timezone) nextErrors.timezone = "Timezone is required";
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };
@@ -84,7 +104,8 @@ const Locations = () => {
         name: item?.name || "Unnamed Location",
         code: item?.code || item?.location_code || "N/A",
         address: toAddressSummary(item?.address) || "N/A",
-        timezone: item?.timezone || item?.location_timezone || "N/A",
+        timezone:
+          item?.timezone_label || item?.timezone || item?.location_timezone || "N/A",
         status: item?.is_active === false ? "deactivated" : "active",
       })),
     [list],
@@ -227,12 +248,12 @@ const Locations = () => {
         setErrors({});
       }}
       editModalTitle="Edit Location"
-      editModalSubtitle="Only name and code are editable."
+      editModalSubtitle="Update location name, code, and timezone."
       editModalIcon={<Pencil size={20} />}
       editModalContent={() => (
         <ReusableSlideForm
           title="Edit Location"
-          subtitle="Update only location name and code."
+          subtitle="Update location details."
           icon={Pencil}
           fields={locationEditableFields}
           values={values}
@@ -296,7 +317,7 @@ const Locations = () => {
       modalContent={({ closeModal }) => (
         <ReusableSlideForm
           title="Location Details"
-          subtitle="Create location with name and code."
+          subtitle="Create location with name, code, and timezone."
           icon={MapPinned}
           fields={locationEditableFields}
           values={values}

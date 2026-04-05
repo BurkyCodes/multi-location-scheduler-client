@@ -90,7 +90,7 @@ export const logout = createAsyncThunk("auth/logout", async (_, { rejectWithValu
 
 export const verifyAuth = createAsyncThunk("auth/verifyAuth", async (_, { rejectWithValue }) => {
   try {
-    const data = await apiRequest("/v1/auth/verify", {
+    const data = await apiRequest("/v1/auth/profile", {
       method: "GET",
       ...tokenConfig(),
     });

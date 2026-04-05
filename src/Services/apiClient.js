@@ -32,7 +32,10 @@ export const apiRequest = async (path, options = {}) => {
 
   const payload = await parseJsonSafely(response);
   if (!response.ok) {
-    throw new Error(payload?.message || "Request failed");
+    const error = new Error(payload?.message || "Request failed");
+    error.status = response.status;
+    error.details = payload;
+    throw error;
   }
 
   return payload;

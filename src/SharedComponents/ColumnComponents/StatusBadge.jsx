@@ -43,6 +43,26 @@ const STATUS_META = {
     className: "bg-amber-50 text-amber-700 border-amber-200",
     label: "pending",
   },
+  clocked_in: {
+    icon: <CheckCircleOutlined className="text-[10px]" />,
+    className: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    label: "clocked in",
+  },
+  paused: {
+    icon: <ClockCircleOutlined className="text-[10px]" />,
+    className: "bg-orange-50 text-orange-700 border-orange-200",
+    label: "paused",
+  },
+  clocked_out: {
+    icon: <CheckCircleOutlined className="text-[10px]" />,
+    className: "bg-slate-100 text-slate-700 border-slate-200",
+    label: "clocked out",
+  },
+  not_started: {
+    icon: <ClockCircleOutlined className="text-[10px]" />,
+    className: "bg-blue-50 text-blue-700 border-blue-200",
+    label: "not started",
+  },
   alert: {
     icon: <WarningOutlined className="text-[10px]" />,
     className: "bg-red-50 text-red-700 border-red-200",

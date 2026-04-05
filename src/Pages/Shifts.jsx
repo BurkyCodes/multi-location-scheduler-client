@@ -13,6 +13,15 @@ import { createShift, deleteShift, fetchShifts, updateShift } from "../Store/Fea
 import { fetchLocations } from "../Store/Features/locationsSlice";
 import { fetchSchedules } from "../Store/Features/schedulesSlice";
 import { fetchSkills } from "../Store/Features/skillsSlice";
+import {
+  clockInAssignmentQuick,
+  clockOutAssignmentQuick,
+  fetchAssignments,
+  fetchMyShiftTracking,
+  pauseAssignmentQuick,
+  resumeAssignmentQuick,
+} from "../Store/Features/assignmentsSlice";
+import { createSwapRequest, fetchSwapRequests } from "../Store/Features/swapRequestsSlice";
 import { hasRole } from "../utils/roles";
 
 const FONT = { fontFamily: "'Montserrat', sans-serif" };
@@ -34,9 +43,37 @@ const TZ_ALIAS_MAP = {
   "Africa/DarEsSalaam": "Africa/Dar_es_Salaam",
   "Africa/Dar es Salaam": "Africa/Dar_es_Salaam",
 };
+const TZ_CODE_TO_IANA = {
+  EAT: "Africa/Nairobi",
+  PST: "America/Los_Angeles",
+};
+const TZ_DISPLAY_LABEL = {
+  EAT: "EAT",
+  PST: "PST",
+};
 
 const getId = (value) => (typeof value === "object" ? value?._id || value?.id : value);
-const toDateTimeLocal = (value) => (value ? dayjs(value).format("YYYY-MM-DDTHH:mm") : "");
+const getAssignmentId = (assignment) =>
+  String(
+    assignment?._id ||
+      assignment?.assignment_id ||
+      assignment?.id ||
+      assignment?.assignment?.id ||
+      "",
+  );
+const parseDateTimeLocal = (value) => {
+  const match = String(value || "").match(
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/,
+  );
+  if (!match) return null;
+  return {
+    year: Number(match[1]),
+    month: Number(match[2]),
+    day: Number(match[3]),
+    hour: Number(match[4]),
+    minute: Number(match[5]),
+  };
+};
 
 const isValidTimeZone = (timeZone) => {
   if (!timeZone) return false;
@@ -48,10 +85,92 @@ const isValidTimeZone = (timeZone) => {
   }
 };
 
-const normalizeTimeZone = (timeZone) => {
-  const normalized = TZ_ALIAS_MAP[timeZone] || timeZone;
-  if (isValidTimeZone(normalized)) return normalized;
-  return "Africa/Nairobi";
+const normalizeTimeZoneCode = (timeZone) => {
+  const normalized = String(timeZone || "").trim().toUpperCase();
+  if (
+    normalized === "PST" ||
+    normalized === "PDT" ||
+    normalized === "PT" ||
+    normalized === "AMERICA/LOS_ANGELES"
+  ) {
+    return "PST";
+  }
+  if (
+    normalized === "EAT" ||
+    normalized === "AFRICA/NAIROBI" ||
+    normalized === "AFRICA/DAR_ES_SALAAM"
+  ) {
+    return "EAT";
+  }
+  return "EAT";
+};
+
+const toIanaTimeZone = (timeZone) => {
+  const normalizedAlias = TZ_ALIAS_MAP[timeZone] || timeZone;
+  if (isValidTimeZone(normalizedAlias)) return normalizedAlias;
+  const code = normalizeTimeZoneCode(timeZone);
+  return TZ_CODE_TO_IANA[code] || TZ_CODE_TO_IANA.EAT;
+};
+
+const getDateTimePartsInTimezone = (date, timeZone) => {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+  const map = {};
+  formatter.formatToParts(date).forEach((part) => {
+    map[part.type] = part.value;
+  });
+  return {
+    year: Number(map.year),
+    month: Number(map.month),
+    day: Number(map.day),
+    hour: Number(map.hour),
+    minute: Number(map.minute),
+  };
+};
+
+const zonedDateTimeToUtcIso = (value, timezoneCode) => {
+  const parsed = parseDateTimeLocal(value);
+  if (!parsed) return null;
+  const { year, month, day, hour, minute } = parsed;
+  const timeZone = toIanaTimeZone(timezoneCode);
+
+  let guess = Date.UTC(year, month - 1, day, hour, minute);
+  for (let i = 0; i < 4; i += 1) {
+    const actual = getDateTimePartsInTimezone(new Date(guess), timeZone);
+    const desiredUtc = Date.UTC(year, month - 1, day, hour, minute);
+    const actualUtc = Date.UTC(
+      actual.year,
+      actual.month - 1,
+      actual.day,
+      actual.hour,
+      actual.minute,
+    );
+    const diff = desiredUtc - actualUtc;
+    if (diff === 0) break;
+    guess += diff;
+  }
+
+  return new Date(guess).toISOString();
+};
+
+const utcIsoToDateTimeLocalInTimezone = (value, timezoneCode) => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const parts = getDateTimePartsInTimezone(date, toIanaTimeZone(timezoneCode));
+  const y = String(parts.year).padStart(4, "0");
+  const m = String(parts.month).padStart(2, "0");
+  const d = String(parts.day).padStart(2, "0");
+  const h = String(parts.hour).padStart(2, "0");
+  const min = String(parts.minute).padStart(2, "0");
+  return `${y}-${m}-${d}T${h}:${min}`;
 };
 
 const isSundayNightChaosPremium = (startsAtIso, timeZone) => {
@@ -132,7 +251,7 @@ const ShiftForm = ({
         </div>
 
         <div>
-          <FieldLabel text="Location" hint={isManager ? "Prefilled from your account and locked" : undefined} />
+          <FieldLabel text="Location" />
           {isManager ? (
             <input value={locationOptions.find((opt) => opt.value === effectiveLocationId)?.label || "No location"} readOnly style={inputStyle(false, true)} />
           ) : (
@@ -153,7 +272,7 @@ const ShiftForm = ({
         </div>
 
         <div>
-          <FieldLabel text="Location Timezone" hint={isManager ? "Prefilled from location and locked" : "Auto-derived from selected location"} />
+          <FieldLabel text="Location Timezone" />
           <input value={locationTimezone || "Africa/Nairobi"} readOnly style={inputStyle(false, true)} />
         </div>
 
@@ -246,9 +365,15 @@ const Shifts = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const currentUser = useSelector((state) => state.auth.user);
+  const currentUserId = currentUser?._id || currentUser?.id;
   const isManager = hasRole(currentUser, ["manager"]);
+  const canManageShifts = hasRole(currentUser, ["admin", "manager"]);
+  const isStaffUser = hasRole(currentUser, ["staff"]) && !canManageShifts;
 
   const { list, loading, saving } = useSelector((state) => state.shifts);
+  const { list: assignments } = useSelector((state) => state.assignments);
+  const { myTracking, myTrackingLoading, quickActionLoading } = useSelector((state) => state.assignments);
+  const { list: swapRequests, saving: swapSaving } = useSelector((state) => state.swapRequests);
   const { list: locations } = useSelector((state) => state.locations);
   const { list: schedules } = useSelector((state) => state.schedules);
   const { skills } = useSelector((state) => state.skills);
@@ -261,10 +386,15 @@ const Shifts = () => {
 
   useEffect(() => {
     dispatch(fetchShifts());
+    dispatch(fetchAssignments());
     dispatch(fetchLocations());
     dispatch(fetchSchedules());
     dispatch(fetchSkills());
-  }, [dispatch]);
+    if (isStaffUser) {
+      dispatch(fetchMyShiftTracking());
+      dispatch(fetchSwapRequests());
+    }
+  }, [dispatch, isStaffUser]);
 
   const managerLocationIds = useMemo(() => {
     const raw = currentUser?.location_ids || [];
@@ -328,7 +458,10 @@ const Shifts = () => {
   const managerDefaultLocationId = isManager && allowedLocations.length ? String(getId(allowedLocations[0])) : "";
   const effectiveLocationId = values.location_id || managerDefaultLocationId;
   const selectedLocation = locationById[String(effectiveLocationId)] || null;
-  const selectedTimezone = normalizeTimeZone(selectedLocation?.timezone || selectedLocation?.location_timezone || "Africa/Nairobi");
+  const selectedTimezoneCode = normalizeTimeZoneCode(
+    selectedLocation?.timezone || selectedLocation?.location_timezone || "EAT",
+  );
+  const selectedTimezoneIana = toIanaTimeZone(selectedTimezoneCode);
 
   const onValueChange = (name, value) => {
     setValues((prev) => ({ ...prev, [name]: value }));
@@ -360,39 +493,97 @@ const Shifts = () => {
       ? list.filter((shift) => managerLocationIds.includes(String(getId(shift?.location_id))))
       : list;
 
+    const assignedShiftIds = new Set(
+      (assignments || [])
+        .filter((assignment) => String(assignment?.status || "").toLowerCase() === "assigned")
+        .map((assignment) => String(getId(assignment?.shift_id)))
+        .filter(Boolean),
+    );
+
     return filtered.map((shift) => {
       const location = shift?.location_id;
       const skill = shift?.required_skill_id;
       const schedule = shift?.schedule_id;
+      const shiftId = String(getId(shift));
 
       return {
-        key: String(getId(shift)),
+        key: shiftId,
         raw: shift,
         location: location?.name || locationById[String(getId(location))]?.name || "Unknown Location",
         schedule: schedule?._id || getId(schedule) || "N/A",
         skill: skill?.name || skill?.code || skillById[String(getId(skill))]?.name || "N/A",
-        timeframe: `${dayjs(shift?.starts_at_utc).format("MMM D, YYYY h:mm A")} - ${dayjs(shift?.ends_at_utc).format("h:mm A")}`,
-        timezone: shift?.location_timezone || "N/A",
+        timeframe:
+          shift?.starts_at_local && shift?.ends_at_local
+            ? `${shift.starts_at_local} - ${shift.ends_at_local}`
+            : `${dayjs(shift?.starts_at_utc).format("MMM D, YYYY h:mm A")} - ${dayjs(
+                shift?.ends_at_utc,
+              ).format("h:mm A")}`,
+        timezone: TZ_DISPLAY_LABEL[normalizeTimeZoneCode(shift?.location_timezone)] || "EAT",
         headcount_required: shift?.headcount_required ?? 1,
         status: shift?.status || "open",
         premium: shift?.is_premium ? "Yes" : "No",
+        hasAssignment: assignedShiftIds.has(shiftId),
       };
     });
-  }, [isManager, list, locationById, managerLocationIds, skillById]);
+  }, [isManager, list, locationById, managerLocationIds, skillById, assignments]);
+
+  const activeAssignmentId = useMemo(
+    () => String(getId(myTracking?.active_assignment) || ""),
+    [myTracking?.active_assignment],
+  );
+
+  const trackedAssignments = Array.isArray(myTracking?.assignments) ? myTracking.assignments : [];
+  const assignedShifts = trackedAssignments.map((assignment) => {
+    const shift = assignment?.shift_id || assignment?.shift || {};
+    const location = shift?.location_id || shift?.location || {};
+    const currentStatus = String(assignment?.status || "assigned").toLowerCase();
+    const assignmentId = getAssignmentId(assignment);
+    const isActive = assignmentId && activeAssignmentId && assignmentId === activeAssignmentId;
+    const status =
+      currentStatus === "paused"
+        ? "paused"
+        : currentStatus === "completed" || currentStatus === "clocked_out"
+        ? "completed"
+        : currentStatus === "in-progress" || currentStatus === "clocked_in" || isActive
+        ? "in-progress"
+        : "assigned";
+
+    return {
+      id: getAssignmentId(assignment),
+      shiftId: String(getId(shift)),
+      title: shift?.title || shift?.name || "Assigned shift",
+      location: location?.name || "Unknown location",
+      start: shift?.starts_at_utc || assignment?.starts_at_utc,
+      end: shift?.ends_at_utc || assignment?.ends_at_utc,
+      timezone: shift?.location_timezone || shift?.timezone || "EAT",
+      status,
+    };
+  });
+
+  const pendingSwapCount = useMemo(
+    () =>
+      (swapRequests || []).filter((request) => {
+        const requesterId = String(getId(request?.requester_id) || request?.requester_id || "");
+        return requesterId === String(currentUserId || "") && String(request?.status || "").toLowerCase().includes("pending");
+      }).length,
+    [swapRequests, currentUserId],
+  );
 
   const buildPayload = (formValues, isUpdate = false) => {
-    const startsAtIso = new Date(formValues.starts_at_utc).toISOString();
-    const timezone = normalizeTimeZone(selectedTimezone);
+    const timezoneCode = selectedTimezoneCode;
+    const startsAtIso = zonedDateTimeToUtcIso(formValues.starts_at_utc, timezoneCode);
+    const endsAtIso = zonedDateTimeToUtcIso(formValues.ends_at_utc, timezoneCode);
+    if (!startsAtIso || !endsAtIso) return null;
 
     return {
       schedule_id: formValues.schedule_id,
       location_id: formValues.location_id || managerDefaultLocationId,
       required_skill_id: formValues.required_skill_id,
       starts_at_utc: startsAtIso,
-      ends_at_utc: new Date(formValues.ends_at_utc).toISOString(),
-      location_timezone: timezone,
+      ends_at_utc: endsAtIso,
+      location_timezone: timezoneCode,
       headcount_required: Number(formValues.headcount_required),
-      is_premium: isSundayNightChaosPremium(startsAtIso, timezone),
+      is_premium: isSundayNightChaosPremium(startsAtIso, selectedTimezoneIana),
       status: formValues.status,
       ...(isUpdate ? { updated_by: currentUser?._id } : { created_by: currentUser?._id }),
     };
@@ -409,7 +600,12 @@ const Shifts = () => {
   const handleCreate = async (event, closeModal) => {
     event.preventDefault();
     if (!validate(values)) return;
-    const result = await dispatch(createShift(buildPayload(values, false)));
+    const payload = buildPayload(values, false);
+    if (!payload) {
+      toast.error("Invalid shift start or end time");
+      return;
+    }
+    const result = await dispatch(createShift(payload));
     if (createShift.fulfilled.match(result)) {
       toast.success("Shift created");
       resetForm();
@@ -422,14 +618,15 @@ const Shifts = () => {
 
   const openEditModal = (record) => {
     const shift = record.raw;
+    const shiftTimezoneCode = normalizeTimeZoneCode(shift?.location_timezone || shift?.timezone || "EAT");
     setEditingShift(record);
     setErrors({});
     setValues({
       schedule_id: String(getId(shift?.schedule_id) || ""),
       location_id: String(getId(shift?.location_id) || ""),
       required_skill_id: String(getId(shift?.required_skill_id) || ""),
-      starts_at_utc: toDateTimeLocal(shift?.starts_at_utc),
-      ends_at_utc: toDateTimeLocal(shift?.ends_at_utc),
+      starts_at_utc: utcIsoToDateTimeLocalInTimezone(shift?.starts_at_utc, shiftTimezoneCode),
+      ends_at_utc: utcIsoToDateTimeLocalInTimezone(shift?.ends_at_utc, shiftTimezoneCode),
       headcount_required: String(shift?.headcount_required ?? 1),
       status: shift?.status || "open",
     });
@@ -440,11 +637,16 @@ const Shifts = () => {
     event.preventDefault();
     if (!editingShift) return;
     if (!validate(values)) return;
+    const payload = buildPayload(values, true);
+    if (!payload) {
+      toast.error("Invalid shift start or end time");
+      return;
+    }
 
     const result = await dispatch(
       updateShift({
         id: editingShift.key,
-        ...buildPayload(values, true),
+        ...payload,
       }),
     );
 
@@ -469,6 +671,153 @@ const Shifts = () => {
       toast.error(result?.payload || "Failed to delete shift");
     }
   };
+
+  const runQuickAction = async (action, assignmentId) => {
+    if (!assignmentId) {
+      toast.error("Could not update shift. Assignment ID is missing.");
+      return;
+    }
+    let result;
+
+    if (action === "clock_in") {
+      result = await dispatch(clockInAssignmentQuick({ assignmentId }));
+    } else if (action === "pause") {
+      result = await dispatch(pauseAssignmentQuick({ assignmentId, reason: "Break" }));
+    } else if (action === "resume") {
+      result = await dispatch(resumeAssignmentQuick({ assignmentId }));
+    } else if (action === "clock_out") {
+      result = await dispatch(clockOutAssignmentQuick({ assignmentId }));
+    } else {
+      return;
+    }
+
+    const fulfilled =
+      clockInAssignmentQuick.fulfilled.match(result) ||
+      pauseAssignmentQuick.fulfilled.match(result) ||
+      resumeAssignmentQuick.fulfilled.match(result) ||
+      clockOutAssignmentQuick.fulfilled.match(result);
+
+    if (fulfilled) {
+      toast.success("Shift action updated");
+      dispatch(fetchMyShiftTracking());
+      return;
+    }
+
+    toast.error(result?.payload || "Failed to update shift");
+  };
+
+  const requestSwap = async (assignment) => {
+    if (!assignment?.shiftId || !assignment?.id || !currentUserId) {
+      toast.error("Could not request swap. Assignment details are incomplete.");
+      return;
+    }
+    const result = await dispatch(
+      createSwapRequest({
+        type: "swap",
+        requester_id: currentUserId,
+        from_assignment_id: assignment.id,
+        note: "Requested from Shifts page",
+      }),
+    );
+
+    if (createSwapRequest.fulfilled.match(result)) {
+      toast.success("Swap request submitted");
+      dispatch(fetchSwapRequests());
+      return;
+    }
+
+    toast.error(result?.payload || "Failed to request swap");
+  };
+
+  if (isStaffUser) {
+    return (
+      <ModuleLayoutsOne
+        title="My Shifts"
+        subtitle="Your assigned shifts with quick actions and swap requests."
+        tableTitle="Assigned Shifts"
+        totalRecords={assignedShifts.length}
+        tableHeaderBadges={[
+          { text: `${assignedShifts.length} assigned` },
+          { text: `${pendingSwapCount} pending swap requests` },
+        ]}
+        tableContent={() => (
+          <div className="p-6">
+            {myTrackingLoading ? (
+              <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm font-semibold text-slate-500">
+                Loading assigned shifts...
+              </div>
+            ) : assignedShifts.length === 0 ? (
+              <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm font-semibold text-slate-500">
+                No assigned shifts found.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                {assignedShifts.map((shift) => (
+                  <div key={shift.id} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-wide text-slate-500">{shift.location}</p>
+                        <h3 className="text-lg font-black text-slate-900">{shift.title}</h3>
+                        <p className="text-xs text-slate-500 mt-1">{shift.timezone}</p>
+                      </div>
+                      <StatusBadge status={shift.status} />
+                    </div>
+                    <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div className="rounded-xl bg-slate-50 p-3">
+                        <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Starts</p>
+                        <p className="text-sm font-semibold text-slate-900">
+                          {dayjs(shift.start).format("MMM D, YYYY h:mm A")}
+                        </p>
+                      </div>
+                      <div className="rounded-xl bg-slate-50 p-3">
+                        <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Ends</p>
+                        <p className="text-sm font-semibold text-slate-900">
+                          {dayjs(shift.end).format("MMM D, YYYY h:mm A")}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mt-4 rounded-2xl border border-slate-200 p-3">
+                      <p className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-500">Quick Actions</p>
+                      <div className="flex flex-wrap gap-2">
+                        {shift.status === "assigned" ? (
+                          <Button size="small" type="primary" loading={quickActionLoading} onClick={() => runQuickAction("clock_in", shift.id)}>
+                            Clock In
+                          </Button>
+                        ) : null}
+                        {shift.status === "in-progress" ? (
+                          <>
+                            <Button size="small" loading={quickActionLoading} onClick={() => runQuickAction("pause", shift.id)}>
+                              Pause
+                            </Button>
+                            <Button size="small" danger loading={quickActionLoading} onClick={() => runQuickAction("clock_out", shift.id)}>
+                              Clock Out
+                            </Button>
+                          </>
+                        ) : null}
+                        {shift.status === "paused" ? (
+                          <>
+                            <Button size="small" type="primary" loading={quickActionLoading} onClick={() => runQuickAction("resume", shift.id)}>
+                              Resume
+                            </Button>
+                            <Button size="small" danger loading={quickActionLoading} onClick={() => runQuickAction("clock_out", shift.id)}>
+                              Clock Out
+                            </Button>
+                          </>
+                        ) : null}
+                        <Button size="small" loading={swapSaving} onClick={() => requestSwap(shift)}>
+                          Request Swap
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      />
+    );
+  }
 
   const columns = [
     {
@@ -506,7 +855,9 @@ const Shifts = () => {
       key: "action",
       render: (_, row) => (
         <div className="flex items-center gap-2">
-          <Button type="text" className="h-8 w-8 rounded-lg bg-blue-50 text-blue-600" icon={<Pencil size={13} />} onClick={() => openEditModal(row)} />
+          {!row.hasAssignment ? (
+            <Button type="text" className="h-8 w-8 rounded-lg bg-blue-50 text-blue-600" icon={<Pencil size={13} />} onClick={() => openEditModal(row)} />
+          ) : null}
           <Button danger type="text" className="h-8 w-8 rounded-lg bg-rose-50 text-rose-600" icon={<Trash2 size={13} />} onClick={() => setDeleteTarget(row)} />
         </div>
       ),
@@ -519,20 +870,24 @@ const Shifts = () => {
       subtitle="Create and manage location shifts for assignment."
       headerAction={({ openModal }) => (
         <div className="flex items-center gap-2">
-          <Button icon={<ClipboardCheck size={14} />} className="h-10 rounded-xl font-bold" onClick={() => navigate("/assignments")}>
-            Assign Staff
-          </Button>
-          <Button
-            type="primary"
-            icon={<Plus size={14} />}
-            className="h-10 rounded-xl font-bold"
-            onClick={() => {
-              resetForm();
-              openModal();
-            }}
-          >
-            Create Shift
-          </Button>
+          {isManager ? (
+            <Button icon={<ClipboardCheck size={14} />} className="h-10 rounded-xl font-bold" onClick={() => navigate("/assignments")}>
+              Assign Staff
+            </Button>
+          ) : null}
+          {canManageShifts ? (
+            <Button
+              type="primary"
+              icon={<Plus size={14} />}
+              className="h-10 rounded-xl font-bold"
+              onClick={() => {
+                resetForm();
+                openModal();
+              }}
+            >
+              Create Shift
+            </Button>
+          ) : null}
         </div>
       )}
       tableTitle="Shift Roster"
@@ -544,7 +899,7 @@ const Shifts = () => {
       modalContent={({ closeModal }) => (
         <ShiftForm
           title="Shift Details"
-          subtitle="Managers get prefilled locked location and timezone."
+          subtitle="Define shift details."
           values={values}
           errors={errors}
           loading={saving}
@@ -552,7 +907,7 @@ const Shifts = () => {
           scheduleOptions={scheduleOptions}
           locationOptions={locationOptions}
           skillOptions={skillOptions}
-          locationTimezone={selectedTimezone}
+          locationTimezone={selectedTimezoneCode}
           isManager={isManager}
           effectiveLocationId={effectiveLocationId}
           onValueChange={onValueChange}
@@ -572,7 +927,7 @@ const Shifts = () => {
       editModalContent={() => (
         <ShiftForm
           title="Edit Shift"
-          subtitle="Modify shift details with locked manager location/timezone."
+          subtitle="Modify shift details."
           values={values}
           errors={errors}
           loading={saving}
@@ -580,7 +935,7 @@ const Shifts = () => {
           scheduleOptions={scheduleOptions}
           locationOptions={locationOptions}
           skillOptions={skillOptions}
-          locationTimezone={selectedTimezone}
+          locationTimezone={selectedTimezoneCode}
           isManager={isManager}
           effectiveLocationId={effectiveLocationId}
           onValueChange={onValueChange}

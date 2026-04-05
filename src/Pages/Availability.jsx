@@ -20,6 +20,24 @@ const DAYS = [
   { label: "Saturday", value: 6 },
 ];
 
+const TIMEZONE_OPTIONS = [
+  { value: "EAT", label: "EAT (UTC+3)" },
+  { value: "PST", label: "PST (UTC-8 / -7 DST)" },
+];
+
+const normalizeTimezoneCode = (value) => {
+  const normalized = String(value || "").trim().toUpperCase();
+  if (
+    normalized === "PST" ||
+    normalized === "PDT" ||
+    normalized === "PT" ||
+    normalized === "AMERICA/LOS_ANGELES"
+  ) {
+    return "PST";
+  }
+  return "EAT";
+};
+
 const toTimeValue = (value) => {
   if (!value) return "";
   const [hours = "09", minutes = "00"] = String(value).split(":");
@@ -50,7 +68,9 @@ const Availability = () => {
   );
   const derivedStartTime = recurringWindows.length ? toTimeValue(recurringWindows[0]?.start_time_local) : "09:00";
   const derivedEndTime = recurringWindows.length ? toTimeValue(recurringWindows[0]?.end_time_local) : "17:00";
-  const derivedTimezone = recurringWindows.length ? recurringWindows[0]?.timezone || "Africa/Nairobi" : "Africa/Nairobi";
+  const derivedTimezone = recurringWindows.length
+    ? normalizeTimezoneCode(recurringWindows[0]?.timezone)
+    : "EAT";
   const derivedLocationId = recurringWindows.length
     ? recurringWindows[0]?.location_id?._id || recurringWindows[0]?.location_id || defaultLocationId || ""
     : defaultLocationId || "";
@@ -87,7 +107,7 @@ const Availability = () => {
       weekday,
       start_time_local: startTime,
       end_time_local: endTime,
-      timezone,
+      timezone: normalizeTimezoneCode(timezone),
       ...(locationId ? { location_id: locationId } : {}),
     }));
 
@@ -128,10 +148,11 @@ const Availability = () => {
                 <label className="text-xs font-bold uppercase tracking-wide text-slate-600">
                   Timezone
                 </label>
-                <Input
+                <Select
                   className="mt-1 rounded-xl"
-                  value={timezone}
-                  onChange={(event) => setTimezoneState(event.target.value)}
+                  value={normalizeTimezoneCode(timezone)}
+                  onChange={setTimezoneState}
+                  options={TIMEZONE_OPTIONS}
                 />
               </div>
 

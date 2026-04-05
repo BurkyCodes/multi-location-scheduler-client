@@ -31,6 +31,21 @@ export const cancelSwapRequest = createAsyncThunk(
   },
 );
 
+export const createSwapRequest = createAsyncThunk(
+  "swapRequests/createSwapRequest",
+  async (payload, { rejectWithValue }) => {
+    try {
+      const response = await apiRequest("/swap-requests", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      return response?.data;
+    } catch (error) {
+      return rejectWithValue(getErrorMessage(error, "Failed to create swap request"));
+    }
+  },
+);
+
 export const managerDecisionSwapRequest = createAsyncThunk(
   "swapRequests/managerDecisionSwapRequest",
   async ({ id, approve, manager_id }, { rejectWithValue }) => {
@@ -64,6 +79,18 @@ const swapRequestsSlice = createSlice({
         state.loading = false;
         state.error = action.payload;
       })
+      .addCase(createSwapRequest.pending, (state) => {
+        state.saving = true;
+        state.error = null;
+      })
+      .addCase(createSwapRequest.fulfilled, (state, action) => {
+        state.saving = false;
+        if (action.payload) state.list.unshift(action.payload);
+      })
+      .addCase(createSwapRequest.rejected, (state, action) => {
+        state.saving = false;
+        state.error = action.payload;
+      })
       .addCase(cancelSwapRequest.fulfilled, (state, action) => {
         const updated = action.payload;
         const id = getId(updated);
@@ -78,4 +105,3 @@ const swapRequestsSlice = createSlice({
 });
 
 export default swapRequestsSlice.reducer;
-
