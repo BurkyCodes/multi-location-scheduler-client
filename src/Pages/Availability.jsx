@@ -60,12 +60,6 @@ const buildDayWindows = (windows) => {
     };
   });
 
-  if (!(windows || []).length) {
-    [1, 2, 3, 4, 5].forEach((weekday) => {
-      base[weekday].enabled = true;
-    });
-  }
-
   return base;
 };
 

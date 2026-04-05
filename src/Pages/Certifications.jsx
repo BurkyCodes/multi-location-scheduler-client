@@ -43,6 +43,7 @@ const Certifications = () => {
   const isAdmin = hasRole(user, ["admin"]);
   const isManager = hasRole(user, ["manager"]);
   const isStaff = hasRole(user, ["staff"]);
+  const canManageCertifications = isAdmin || isManager;
 
   const [activeTab, setActiveTab] = useState(CERT_TAB);
   const [formValues, setFormValues] = useState({});
@@ -192,7 +193,7 @@ const Certifications = () => {
       },
     ];
 
-    if (isManager) {
+    if (canManageCertifications) {
       cols.push({
         title: colTitle("Action"),
         key: "action",
@@ -227,7 +228,7 @@ const Certifications = () => {
     }
 
     return cols;
-  }, [isManager]);
+  }, [canManageCertifications]);
 
   const skillColumns = [
     {
@@ -486,7 +487,7 @@ const Certifications = () => {
   }, [activeTab, locationOptions, skillOptions, staffOptions]);
 
   const canOpenCreateModal =
-    (activeTab === CERT_TAB && isManager) ||
+    (activeTab === CERT_TAB && canManageCertifications) ||
     (activeTab === SKILL_TAB && isAdmin) ||
     (activeTab === STAFF_SKILL_TAB && isManager);
 
@@ -509,7 +510,7 @@ const Certifications = () => {
   };
 
   const modalSubtitleByTab = {
-    [CERT_TAB]: "Managers can create and maintain location certifications.",
+    [CERT_TAB]: "Admins and managers can create and maintain location certifications.",
     [SKILL_TAB]: "Admins can add available skills for the organization.",
     [STAFF_SKILL_TAB]: "Managers can assign skills to staff members.",
   };
@@ -524,7 +525,7 @@ const Certifications = () => {
             <div>
               <p className="text-xl font-extrabold">Certifications & Skills</p>
               <p className="text-xs text-slate-500">
-                Manager handles certifications and staff skills. Admin adds skills. Staff has read-only self view.
+                Admins/managers handle certifications. Managers handle staff skills. Staff has read-only self view.
               </p>
             </div>
             {canOpenCreateModal ? (

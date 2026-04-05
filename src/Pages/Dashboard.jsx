@@ -110,7 +110,7 @@ const Dashboard = () => {
       dispatch(fetchStaff());
       dispatch(fetchAuditLogs({ limit: 10 }));
     }
-    if (currentUserId) dispatch(fetchAvailabilityByUser(currentUserId));
+    if (isStaffUser && currentUserId) dispatch(fetchAvailabilityByUser(currentUserId));
   }, [dispatch, isStaffUser, currentUserId]);
 
   const rows = useMemo(() => {

@@ -10,6 +10,9 @@ const initialState = {
   error: null,
 };
 
+const getUserKey = (value) =>
+  String((typeof value === "object" ? value?._id || value?.id : value) || "");
+
 export const upsertStaffPreference = createAsyncThunk(
   "preferences/upsertStaffPreference",
   async (payload, { rejectWithValue }) => {
@@ -59,6 +62,12 @@ export const fetchNotificationPreferenceByUser = createAsyncThunk(
       const response = await apiRequest(`/preferences/notifications/user/${userId}`);
       return response?.data;
     } catch (error) {
+      if (error?.status === 404) {
+        return {
+          user_id: userId,
+          channels: { in_app: false, email: false },
+        };
+      }
       return rejectWithValue(getErrorMessage(error, "Failed to fetch notification preference"));
     }
   },
@@ -72,24 +81,29 @@ const preferencesSlice = createSlice({
     builder
       .addCase(upsertStaffPreference.fulfilled, (state, action) => {
         const doc = action.payload;
-        if (doc?.user_id) state.staffByUser[doc.user_id] = doc;
+        const userKey = getUserKey(doc?.user_id);
+        if (userKey) state.staffByUser[userKey] = doc;
       })
       .addCase(fetchStaffPreferenceByUser.fulfilled, (state, action) => {
         const doc = action.payload;
-        if (doc?.user_id) state.staffByUser[doc.user_id] = doc;
+        const userKey = getUserKey(doc?.user_id);
+        if (userKey) state.staffByUser[userKey] = doc;
       })
       .addCase(upsertNotificationPreference.fulfilled, (state, action) => {
         const doc = action.payload;
-        if (doc?.user_id) state.notificationsByUser[doc.user_id] = doc;
+        const userKey = getUserKey(doc?.user_id);
+        if (userKey) state.notificationsByUser[userKey] = doc;
       })
       .addCase(fetchNotificationPreferenceByUser.fulfilled, (state, action) => {
         const doc = action.payload;
-        if (doc?.user_id) state.notificationsByUser[doc.user_id] = doc;
+        const userKey = getUserKey(doc?.user_id);
+        if (userKey) state.notificationsByUser[userKey] = doc;
       })
       .addMatcher(
         (action) => action.type.startsWith("preferences/") && action.type.endsWith("/pending"),
         (state) => {
           state.loading = true;
+          state.saving = true;
           state.error = null;
         },
       )
@@ -97,12 +111,14 @@ const preferencesSlice = createSlice({
         (action) => action.type.startsWith("preferences/") && action.type.endsWith("/fulfilled"),
         (state) => {
           state.loading = false;
+          state.saving = false;
         },
       )
       .addMatcher(
         (action) => action.type.startsWith("preferences/") && action.type.endsWith("/rejected"),
         (state, action) => {
           state.loading = false;
+          state.saving = false;
           state.error = action.payload;
         },
       );
@@ -110,4 +126,3 @@ const preferencesSlice = createSlice({
 });
 
 export default preferencesSlice.reducer;
-

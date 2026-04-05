@@ -15,6 +15,7 @@ import StaffAssignments from "../Pages/StaffAssignments";
 import Certifications from "../Pages/Certifications";
 import StaffPreferences from "../Pages/StaffPreferences";
 import EmployeeHours from "../Pages/EmployeeHours";
+import Notifications from "../Pages/Notifications";
 import { fetchProfile, verifyAuth } from "../Store/Features/authSlice";
 
 const getRoleLabel = (user) =>
@@ -117,6 +118,7 @@ const router = createBrowserRouter([
         children: [{ path: "certifications", element: <Certifications /> }],
       },
       { path: "swaps", element: <Swaps /> },
+      { path: "notifications", element: <Notifications /> },
       { path: "settings", element: <Settings /> },
     ],
   },

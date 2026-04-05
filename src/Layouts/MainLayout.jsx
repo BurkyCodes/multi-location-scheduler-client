@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Layout, Menu, Button, Avatar, Dropdown } from "antd";
+import { Layout, Menu, Button, Avatar, Dropdown, Badge } from "antd";
 import { useDispatch, useSelector } from "react-redux";
 import {
   LayoutDashboard,
@@ -15,11 +15,13 @@ import {
   ClipboardCheck,
   BadgeCheck,
   SlidersHorizontal,
+  Bell,
 } from "lucide-react";
 import {CoffeeOutlined} from "@ant-design/icons";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { logoutUser } from "../Store/Features/authSlice";
 import { hasRole } from "../utils/roles";
+import NotificationsBootstrap from "./NotificationsBootstrap";
 
 const { Sider, Content, Header } = Layout;
 const PALETTE = {
@@ -43,6 +45,17 @@ const MainLayout = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useSelector((state) => state.auth);
+  const unreadCount = useSelector((state) => state.notifications.unreadCount);
+  const notificationPrefs = useSelector((state) =>
+    state.preferences.notificationsByUser[String(user?._id || user?.id || "")]
+  );
+  const inAppEnabled = Boolean(
+    notificationPrefs?.channels?.in_app ??
+      notificationPrefs?.in_app_enabled ??
+      notificationPrefs?.channels?.email ??
+      notificationPrefs?.email_enabled ??
+      notificationPrefs?.email
+  );
 
   const roleLabel =
     user?.role_id?.role ||
@@ -78,6 +91,7 @@ const MainLayout = () => {
   });
 
   const bottomMenuItems = [
+    { key: "/notifications", icon: <Bell size={20} />, label: "Notifications" },
     { key: "/settings", icon: <Settings size={20} />, label: "Settings" },
   ];
 
@@ -201,6 +215,14 @@ const MainLayout = () => {
           />
 
           <div className="flex flex-row  items-center gap-3">
+            <Badge count={inAppEnabled ? unreadCount : 0} size="small" offset={[-2, 4]}>
+              <Button
+                type="text"
+                icon={<Bell size={18} />}
+                onClick={() => navigate("/notifications")}
+                style={{ color: PALETTE.black, border: "1px solid #e2e8f0" }}
+              />
+            </Badge>
             <p
               className="text-[11px] font-bold uppercase m-0"
               style={{ color: PALETTE.black, letterSpacing: "0.08em" }}
@@ -240,6 +262,7 @@ const MainLayout = () => {
           <Outlet />
         </Content>
       </Layout>
+      <NotificationsBootstrap />
 
       {isMobile && !collapsed ? (
         <button

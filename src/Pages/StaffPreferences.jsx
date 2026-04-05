@@ -75,7 +75,7 @@ const StaffPreferences = () => {
           Save Preferences
         </Button>
       }
-      tableContent={
+      statsContent={
         <div className="p-6">
           <Card className="rounded-2xl border border-slate-100 shadow-sm">
             <div className="flex items-center gap-2 mb-4">

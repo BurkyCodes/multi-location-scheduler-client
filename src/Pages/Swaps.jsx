@@ -207,7 +207,7 @@ const Swaps = () => {
     dispatch(fetchShifts());
     dispatch(fetchStaffSkills());
     if (isStaff) dispatch(fetchMyShiftTracking());
-    if (userId) dispatch(fetchAvailabilityByUser(userId));
+    if (isStaff && userId) dispatch(fetchAvailabilityByUser(userId));
   }, [dispatch, isStaff, userId]);
 
   const activeAssignmentId = useMemo(
@@ -310,6 +310,10 @@ const Swaps = () => {
       toast.error("Could not request swap. Assignment details are incomplete.");
       return;
     }
+    if (myPendingSwapAssignmentIds.has(String(assignment.id))) {
+      toast.error("Swap already requested for this shift.");
+      return;
+    }
     setRequestingSwapId(assignment.id);
     const result = await dispatch(
       createSwapRequest({
@@ -405,6 +409,19 @@ const Swaps = () => {
         return requesterId === String(userId || "") && String(item?.status || "").toLowerCase().includes("pending");
       }),
     [list, userId],
+  );
+
+  const myPendingSwapAssignmentIds = new Set(
+    list
+      .filter((item) => {
+        const requesterId = String(getId(item?.requester_id) || item?.requester_id || "");
+        return (
+          requesterId === String(userId || "") &&
+          String(item?.status || "").toLowerCase().includes("pending")
+        );
+      })
+      .map((item) => String(getId(item?.from_assignment_id) || item?.from_assignment_id || ""))
+      .filter(Boolean),
   );
 
   const otherStaffRequests = useMemo(
@@ -642,9 +659,12 @@ const Swaps = () => {
                       type="default"
                       icon={<ArrowLeftRight size={14} />}
                       loading={saving && requestingSwapId === shift.id}
+                      disabled={myPendingSwapAssignmentIds.has(String(shift.id))}
                       onClick={() => submitSwapRequest(shift)}
                     >
-                      Request Swap
+                      {myPendingSwapAssignmentIds.has(String(shift.id))
+                        ? "Requested Swap"
+                        : "Request Swap"}
                     </Button>
                   </div>
                 </div>

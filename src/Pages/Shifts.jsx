@@ -447,6 +447,15 @@ const Shifts = () => {
     }));
   }, [allowedLocations, isManager, schedules]);
 
+  const scheduleById = useMemo(
+    () =>
+      (schedules || []).reduce((acc, schedule) => {
+        acc[String(getId(schedule))] = schedule;
+        return acc;
+      }, {}),
+    [schedules],
+  );
+
   const skillOptions = useMemo(
     () =>
       (skills || []).map((skill) => ({
@@ -578,6 +587,45 @@ const Shifts = () => {
       }).length,
     [swapRequests, currentUserId],
   );
+  const pendingSwapAssignmentIds = useMemo(
+    () =>
+      new Set(
+        (swapRequests || [])
+          .filter((request) => {
+            const requesterId = String(getId(request?.requester_id) || request?.requester_id || "");
+            return requesterId === String(currentUserId || "") && String(request?.status || "").toLowerCase().includes("pending");
+          })
+          .map((request) => String(getId(request?.from_assignment_id) || request?.from_assignment_id || ""))
+          .filter(Boolean),
+      ),
+    [swapRequests, currentUserId],
+  );
+  const pendingSwapRequests = useMemo(
+    () =>
+      (swapRequests || []).filter((request) => {
+        const requesterId = String(getId(request?.requester_id) || request?.requester_id || "");
+        return requesterId === String(currentUserId || "") && String(request?.status || "").toLowerCase().includes("pending");
+      }),
+    [swapRequests, currentUserId],
+  );
+
+  const validateShiftAgainstSchedule = (payload) => {
+    const scheduleId = String(payload?.schedule_id || "");
+    const selectedSchedule = scheduleById[scheduleId];
+    if (!selectedSchedule?.week_start_date || !payload?.starts_at_utc) return { valid: true };
+    const scheduleStart = new Date(selectedSchedule.week_start_date);
+    const shiftStart = new Date(payload.starts_at_utc);
+    if (Number.isNaN(scheduleStart.getTime()) || Number.isNaN(shiftStart.getTime())) {
+      return { valid: true };
+    }
+    if (shiftStart < scheduleStart) {
+      return {
+        valid: false,
+        message: "Shift start cannot be before the selected schedule start date.",
+      };
+    }
+    return { valid: true };
+  };
 
   const buildPayload = (formValues, isUpdate = false) => {
     const timezoneCode = selectedTimezoneCode;
@@ -615,6 +663,12 @@ const Shifts = () => {
       toast.error("Invalid shift start or end time");
       return;
     }
+    const scheduleValidation = validateShiftAgainstSchedule(payload);
+    if (!scheduleValidation.valid) {
+      setErrors((prev) => ({ ...prev, starts_at_utc: scheduleValidation.message }));
+      toast.error(scheduleValidation.message);
+      return;
+    }
     const result = await dispatch(createShift(payload));
     if (createShift.fulfilled.match(result)) {
       toast.success("Shift created");
@@ -650,6 +704,12 @@ const Shifts = () => {
     const payload = buildPayload(values, true);
     if (!payload) {
       toast.error("Invalid shift start or end time");
+      return;
+    }
+    const scheduleValidation = validateShiftAgainstSchedule(payload);
+    if (!scheduleValidation.valid) {
+      setErrors((prev) => ({ ...prev, starts_at_utc: scheduleValidation.message }));
+      toast.error(scheduleValidation.message);
       return;
     }
 
@@ -719,6 +779,10 @@ const Shifts = () => {
   const requestSwap = async (assignment) => {
     if (!assignment?.shiftId || !assignment?.id || !currentUserId) {
       toast.error("Could not request swap. Assignment details are incomplete.");
+      return;
+    }
+    if (pendingSwapAssignmentIds.has(String(assignment.id))) {
+      toast.error("Swap already requested for this shift.");
       return;
     }
     const result = await dispatch(
@@ -828,8 +892,15 @@ const Shifts = () => {
                             </Button>
                           </>
                         ) : null}
-                        <Button size="small" loading={swapSaving} onClick={() => requestSwap(shift)}>
-                          Request Swap
+                        <Button
+                          size="small"
+                          loading={swapSaving}
+                          disabled={pendingSwapAssignmentIds.has(String(shift.id))}
+                          onClick={() => requestSwap(shift)}
+                        >
+                          {pendingSwapAssignmentIds.has(String(shift.id))
+                            ? "Requested Swap"
+                            : "Request Swap"}
                         </Button>
                       </div>
                     </div>
@@ -837,6 +908,31 @@ const Shifts = () => {
                 ))}
               </div>
             )}
+            <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <p className="text-sm font-black text-slate-900 mb-3">My Swap Requests</p>
+              {pendingSwapRequests.length === 0 ? (
+                <p className="text-sm text-slate-500">No pending swap requests.</p>
+              ) : (
+                <div className="space-y-2">
+                  {pendingSwapRequests.map((request) => (
+                    <div key={String(getId(request))} className="rounded-xl bg-slate-50 p-3">
+                      <p className="text-xs font-semibold text-slate-500">
+                        Requested {dayjs(request?.createdAt || request?.created_at).format("MMM D, YYYY h:mm A")}
+                      </p>
+                      <p className="text-sm font-semibold text-slate-900">
+                        {request?.from_assignment_id?.shift_id?.title ||
+                          request?.from_assignment_id?.shift_id?.name ||
+                          "Shift"}
+                      </p>
+                      <p className="text-xs text-slate-600 mt-1">
+                        {dayjs(request?.from_assignment_id?.shift_id?.starts_at_utc).format("MMM D, YYYY h:mm A")} -{" "}
+                        {dayjs(request?.from_assignment_id?.shift_id?.ends_at_utc).format("MMM D, YYYY h:mm A")}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
       />

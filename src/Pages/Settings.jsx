@@ -26,7 +26,9 @@ const Settings = () => {
   const effectiveInAppEnabled =
     inAppEnabled ??
     Boolean(
+      notificationPrefs?.channels?.in_app ??
       notificationPrefs?.in_app_enabled ??
+        notificationPrefs?.channels?.email ??
         notificationPrefs?.email_enabled ??
         notificationPrefs?.email,
     );
@@ -36,6 +38,10 @@ const Settings = () => {
     const result = await dispatch(
       upsertNotificationPreference({
         user_id: user._id,
+        channels: {
+          in_app: effectiveInAppEnabled,
+          email: effectiveInAppEnabled,
+        },
         in_app_enabled: effectiveInAppEnabled,
         email_enabled: effectiveInAppEnabled,
         sms_enabled: false,
