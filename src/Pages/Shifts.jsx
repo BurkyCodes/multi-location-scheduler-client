@@ -22,6 +22,7 @@ import {
   resumeAssignmentQuick,
 } from "../Store/Features/assignmentsSlice";
 import { createSwapRequest, fetchSwapRequests } from "../Store/Features/swapRequestsSlice";
+import { createAuditLog } from "../Store/Features/auditLogsSlice";
 import { hasRole } from "../utils/roles";
 
 const FONT = { fontFamily: "'Montserrat', sans-serif" };
@@ -53,6 +54,15 @@ const TZ_DISPLAY_LABEL = {
 };
 
 const getId = (value) => (typeof value === "object" ? value?._id || value?.id : value);
+const toErrorMessage = (payload, fallback) => {
+  if (typeof payload === "string") return payload;
+  if (payload && typeof payload === "object") {
+    if (typeof payload.message === "string") return payload.message;
+    const firstText = Object.values(payload).find((item) => typeof item === "string");
+    if (firstText) return firstText;
+  }
+  return fallback;
+};
 const getAssignmentId = (assignment) =>
   String(
     assignment?._id ||
@@ -612,7 +622,7 @@ const Shifts = () => {
       closeModal();
       dispatch(fetchShifts());
     } else {
-      toast.error(result?.payload || "Failed to create shift");
+      toast.error(toErrorMessage(result?.payload, "Failed to create shift"));
     }
   };
 
@@ -657,7 +667,7 @@ const Shifts = () => {
       resetForm();
       dispatch(fetchShifts());
     } else {
-      toast.error(result?.payload || "Failed to update shift");
+      toast.error(toErrorMessage(result?.payload, "Failed to update shift"));
     }
   };
 
@@ -668,7 +678,7 @@ const Shifts = () => {
       toast.success("Shift deleted");
       setDeleteTarget(null);
     } else {
-      toast.error(result?.payload || "Failed to delete shift");
+      toast.error(toErrorMessage(result?.payload, "Failed to delete shift"));
     }
   };
 
@@ -703,7 +713,7 @@ const Shifts = () => {
       return;
     }
 
-    toast.error(result?.payload || "Failed to update shift");
+    toast.error(toErrorMessage(result?.payload, "Failed to update shift"));
   };
 
   const requestSwap = async (assignment) => {
@@ -721,12 +731,26 @@ const Shifts = () => {
     );
 
     if (createSwapRequest.fulfilled.match(result)) {
+      const createdRequest = result?.payload;
+      dispatch(
+        createAuditLog({
+          actor_user_id: currentUserId,
+          action: "swap_request_created",
+          module: "swap_requests",
+          entity_type: "swap_request",
+          after_state: {
+            swap_request_id: String(getId(createdRequest) || ""),
+            requester_id: currentUserId,
+            assignment_id: assignment.id,
+          },
+        }),
+      );
       toast.success("Swap request submitted");
       dispatch(fetchSwapRequests());
       return;
     }
 
-    toast.error(result?.payload || "Failed to request swap");
+    toast.error(toErrorMessage(result?.payload, "Failed to request swap"));
   };
 
   if (isStaffUser) {

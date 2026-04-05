@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Button } from "antd";
+import { Button, Select } from "antd";
 import { Check, Eye, MapPin, Pencil, Plus, Trash2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import ModuleLayoutsOne from "../Layouts/ModuleLayoutsOne";
 import { createStaff, deleteStaff, fetchStaff, updateStaff } from "../Store/Features/staffSlice";
 import { fetchLocations } from "../Store/Features/locationsSlice";
+import { fetchUserRoles } from "../Store/Features/userRolesSlice";
 import { colTitle } from "../SharedComponents/ColumnComponents/ColumnTitle";
 import ColumnData from "../SharedComponents/ColumnComponents/ColumnData";
 import StatusBadge from "../SharedComponents/ColumnComponents/StatusBadge";
@@ -19,7 +20,7 @@ const initialValues = {
   email: "",
   phone_number: "",
   role: "staff",
-  location_id: "",
+  location_ids: [],
   status: "active",
 };
 
@@ -211,15 +212,19 @@ const StaffForm = ({
         </div>
 
         <div>
-          <Lbl labelHint="Assign exactly one location for now">Assigned Location</Lbl>
-          <PillToggle
-            fullWidth
+          <Lbl labelHint={values.role === "manager" ? "Managers can have multiple locations" : "Select one location"}>
+            Assigned Location{values.role === "manager" ? "s" : ""}
+          </Lbl>
+          <Select
+            mode={values.role === "manager" ? "multiple" : undefined}
+            value={values.location_ids}
+            onChange={(next) => onValueChange("location_ids", Array.isArray(next) ? next : next ? [next] : [])}
             options={locationOptions}
-            value={values.location_id}
-            onChange={(v) => onValueChange("location_id", v)}
+            placeholder={values.role === "manager" ? "Select one or more locations" : "Select one location"}
+            style={{ width: "100%" }}
           />
-          {errors.location_id ? (
-            <div style={{ ...FONT_XS, color: "#ef4444", marginTop: 4 }}>{errors.location_id}</div>
+          {errors.location_ids ? (
+            <div style={{ ...FONT_XS, color: "#ef4444", marginTop: 4 }}>{errors.location_ids}</div>
           ) : null}
         </div>
       </div>
@@ -279,6 +284,7 @@ const Staff = () => {
   const dispatch = useDispatch();
   const { list, loading, saving } = useSelector((state) => state.staff);
   const { list: locations } = useSelector((state) => state.locations);
+  const { list: userRoles } = useSelector((state) => state.userRoles);
 
   const [values, setValues] = useState(initialValues);
   const [errors, setErrors] = useState({});
@@ -291,7 +297,19 @@ const Staff = () => {
   useEffect(() => {
     dispatch(fetchStaff());
     dispatch(fetchLocations());
+    dispatch(fetchUserRoles());
   }, [dispatch]);
+
+  const roleIdByName = useMemo(
+    () =>
+      (userRoles || []).reduce((acc, roleDoc) => {
+        const roleName = String(roleDoc?.role || "").toLowerCase().trim();
+        if (!roleName) return acc;
+        acc[roleName] = String(getId(roleDoc));
+        return acc;
+      }, {}),
+    [userRoles],
+  );
 
   const onValueChange = (name, value) => {
     setValues((prev) => ({ ...prev, [name]: value }));
@@ -304,7 +322,12 @@ const Staff = () => {
     if (!payload.email.trim()) nextErrors.email = "Email is required";
     if (!/^\S+@\S+\.\S+$/.test(payload.email.trim())) nextErrors.email = "Enter a valid email";
     if (!editingStaff && !payload.phone_number.trim()) nextErrors.phone_number = "Phone number is required";
-    if (!payload.location_id) nextErrors.location_id = "Select one location";
+    const selectedLocationCount = Array.isArray(payload.location_ids) ? payload.location_ids.length : 0;
+    if (payload.role === "manager" && selectedLocationCount < 1) {
+      nextErrors.location_ids = "Select at least one location for manager";
+    } else if (payload.role === "staff" && selectedLocationCount !== 1) {
+      nextErrors.location_ids = "Staff must have exactly one location";
+    }
     setErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   };
@@ -322,9 +345,7 @@ const Staff = () => {
     () =>
       locations.map((location) => ({
         value: String(getId(location)),
-        label: location?.name || "Unnamed Location",
-        icon: MapPin,
-        desc: `${location?.code || "No code"} - ${location?.timezone || "No timezone"}`,
+        label: `${location?.name || "Unnamed Location"} (${location?.code || "No code"})`,
       })),
     [locations],
   );
@@ -349,14 +370,20 @@ const Staff = () => {
   const handleSubmit = async (event, closeModal) => {
     event.preventDefault();
     if (!validate(values)) return;
+    const roleName = String(values.role || "staff").toLowerCase().trim();
+    const roleId = roleIdByName[roleName];
+    if (!roleId) {
+      toast.error(`Role "${roleName}" is not configured in user roles.`);
+      return;
+    }
     const result = await dispatch(
       createStaff({
         name: values.name.trim(),
         email: values.email.trim(),
         phone_number: values.phone_number.trim(),
-        role: values.role,
+        role_id: roleId,
         status: values.status,
-        location_ids: values.location_id ? [values.location_id] : [],
+        location_ids: Array.isArray(values.location_ids) ? values.location_ids : [],
       }),
     );
     if (createStaff.fulfilled.match(result)) {
@@ -370,7 +397,7 @@ const Staff = () => {
 
   const openEditModal = (record) => {
     const item = record.raw;
-    const firstLocationId = (item?.location_ids || []).map((locationId) => String(getId(locationId))).find(Boolean) || "";
+    const locationIds = (item?.location_ids || []).map((locationId) => String(getId(locationId))).filter(Boolean);
     setEditingStaff(record);
     setErrors({});
     setValues({
@@ -379,7 +406,7 @@ const Staff = () => {
       phone_number: item?.phone_number || "",
       role: item?.role_id?.role || item?.role || "staff",
       status: item?.status || "active",
-      location_id: firstLocationId,
+      location_ids: locationIds,
     });
     setEditOpen(true);
   };
@@ -388,14 +415,20 @@ const Staff = () => {
     event.preventDefault();
     if (!editingStaff) return;
     if (!validate(values)) return;
+    const roleName = String(values.role || "staff").toLowerCase().trim();
+    const roleId = roleIdByName[roleName];
+    if (!roleId) {
+      toast.error(`Role "${roleName}" is not configured in user roles.`);
+      return;
+    }
 
     const result = await dispatch(
       updateStaff({
         id: editingStaff.key,
         name: values.name.trim(),
         email: values.email.trim(),
-        role: values.role,
-        location_ids: values.location_id ? [values.location_id] : [],
+        role_id: roleId,
+        location_ids: Array.isArray(values.location_ids) ? values.location_ids : [],
       }),
     );
 
@@ -508,13 +541,13 @@ const Staff = () => {
         setErrors({});
       }}
       editModalTitle="Edit Staff Member"
-      editModalSubtitle="Update full name, email, role, and assigned location."
+      editModalSubtitle="Update full name, email, role, and assigned locations."
       editModalIcon={<Pencil size={20} />}
       editModalContent={() => (
         <StaffForm
           mode="edit"
           title="Edit Staff Information"
-          subtitle="Only full name, email, role, and location can be edited."
+          subtitle="Only full name, email, role, and locations can be edited."
           submitLabel="Update Staff"
           loading={saving}
           values={values}
@@ -576,7 +609,7 @@ const Staff = () => {
         subtitle: `Delete ${deleteTarget?.name || "this staff member"}? This action cannot be undone.`,
       }}
       modalTitle="Add Staff Member"
-      modalSubtitle="Create a staff profile and assign one location."
+      modalSubtitle="Create a staff profile and assign locations."
       modalIcon={<UserPlus size={20} />}
       modalContent={({ closeModal }) => (
         <StaffForm

@@ -44,6 +44,31 @@ const toTimeValue = (value) => {
   return `${hours.padStart(2, "0")}:${minutes.padStart(2, "0")}`;
 };
 
+const buildDayWindows = (windows) => {
+  const base = DAYS.reduce((acc, day) => {
+    acc[day.value] = { enabled: false, start: "09:00", end: "17:00" };
+    return acc;
+  }, {});
+
+  (windows || []).forEach((window) => {
+    const weekday = Number(window?.weekday);
+    if (Number.isNaN(weekday) || !base[weekday]) return;
+    base[weekday] = {
+      enabled: true,
+      start: toTimeValue(window?.start_time_local || "09:00"),
+      end: toTimeValue(window?.end_time_local || "17:00"),
+    };
+  });
+
+  if (!(windows || []).length) {
+    [1, 2, 3, 4, 5].forEach((weekday) => {
+      base[weekday].enabled = true;
+    });
+  }
+
+  return base;
+};
+
 const Availability = () => {
   const dispatch = useDispatch();
   const user = useSelector((state) => state.auth.user);
@@ -62,12 +87,7 @@ const Availability = () => {
     () => existing?.recurring_windows || [],
     [existing?.recurring_windows],
   );
-  const derivedSelectedDays = useMemo(
-    () => (recurringWindows.length ? [...new Set(recurringWindows.map((window) => window.weekday))] : [1, 2, 3, 4, 5]),
-    [recurringWindows],
-  );
-  const derivedStartTime = recurringWindows.length ? toTimeValue(recurringWindows[0]?.start_time_local) : "09:00";
-  const derivedEndTime = recurringWindows.length ? toTimeValue(recurringWindows[0]?.end_time_local) : "17:00";
+  const derivedDayWindows = useMemo(() => buildDayWindows(recurringWindows), [recurringWindows]);
   const derivedTimezone = recurringWindows.length
     ? normalizeTimezoneCode(recurringWindows[0]?.timezone)
     : "EAT";
@@ -75,17 +95,14 @@ const Availability = () => {
     ? recurringWindows[0]?.location_id?._id || recurringWindows[0]?.location_id || defaultLocationId || ""
     : defaultLocationId || "";
 
-  const [selectedDaysState, setSelectedDaysState] = useState();
-  const [startTimeState, setStartTimeState] = useState();
-  const [endTimeState, setEndTimeState] = useState();
+  const [dayWindowsState, setDayWindowsState] = useState();
   const [timezoneState, setTimezoneState] = useState();
   const [locationIdState, setLocationIdState] = useState();
 
-  const selectedDays = selectedDaysState ?? derivedSelectedDays;
-  const startTime = startTimeState ?? derivedStartTime;
-  const endTime = endTimeState ?? derivedEndTime;
+  const dayWindows = dayWindowsState ?? derivedDayWindows;
   const timezone = timezoneState ?? derivedTimezone;
   const locationId = locationIdState ?? derivedLocationId;
+  const selectedDays = DAYS.filter((day) => dayWindows?.[day.value]?.enabled).map((day) => day.value);
 
   useEffect(() => {
     dispatch(fetchLocations());
@@ -98,15 +115,19 @@ const Availability = () => {
       toast.error("Select at least one day");
       return;
     }
-    if (!startTime || !endTime) {
-      toast.error("Start and end time are required");
+    const hasInvalidWindow = selectedDays.some((day) => {
+      const dayWindow = dayWindows?.[day];
+      return !dayWindow?.start || !dayWindow?.end;
+    });
+    if (hasInvalidWindow) {
+      toast.error("Each selected day must include start and end time");
       return;
     }
 
     const recurringWindows = selectedDays.map((weekday) => ({
       weekday,
-      start_time_local: startTime,
-      end_time_local: endTime,
+      start_time_local: dayWindows[weekday].start,
+      end_time_local: dayWindows[weekday].end,
       timezone: normalizeTimezoneCode(timezone),
       ...(locationId ? { location_id: locationId } : {}),
     }));
@@ -130,6 +151,8 @@ const Availability = () => {
     <ModuleLayoutsOne
       title="My Availability"
       subtitle="Set your recurring work availability windows."
+      tableTitle="Availability Windows"
+      totalRecords={selectedDays.length}
       headerAction={
         <Button type="primary" className="h-10 rounded-xl font-bold" onClick={onSave} loading={saving}>
           Save Availability
@@ -172,41 +195,71 @@ const Availability = () => {
                 />
               </div>
 
-              <div>
-                <label className="text-xs font-bold uppercase tracking-wide text-slate-600">
-                  Start Time
-                </label>
-                <Input
-                  type="time"
-                  className="mt-1 rounded-xl"
-                  value={startTime}
-                  onChange={(event) => setStartTimeState(event.target.value)}
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-bold uppercase tracking-wide text-slate-600">
-                  End Time
-                </label>
-                <Input
-                  type="time"
-                  className="mt-1 rounded-xl"
-                  value={endTime}
-                  onChange={(event) => setEndTimeState(event.target.value)}
-                />
-              </div>
             </div>
 
             <div className="mt-4">
               <label className="text-xs font-bold uppercase tracking-wide text-slate-600">
-                Available Days
+                Available Days and Time Windows
               </label>
-              <div className="mt-2">
-                <Checkbox.Group
-                  options={DAYS.map((day) => ({ label: day.label, value: day.value }))}
-                  value={selectedDays}
-                  onChange={(value) => setSelectedDaysState(value)}
-                />
+              <div className="mt-2 space-y-2">
+                {DAYS.map((day) => {
+                  const dayWindow = dayWindows?.[day.value] || {
+                    enabled: false,
+                    start: "09:00",
+                    end: "17:00",
+                  };
+                  return (
+                    <div
+                      key={day.value}
+                      className="grid grid-cols-1 md:grid-cols-[150px_1fr_1fr] gap-2 items-center rounded-xl border border-slate-100 p-2"
+                    >
+                      <Checkbox
+                        checked={Boolean(dayWindow.enabled)}
+                        onChange={(event) =>
+                          setDayWindowsState((prev) => ({
+                            ...(prev ?? dayWindows),
+                            [day.value]: {
+                              ...(prev?.[day.value] ?? dayWindow),
+                              enabled: event.target.checked,
+                            },
+                          }))
+                        }
+                      >
+                        {day.label}
+                      </Checkbox>
+                      <Input
+                        type="time"
+                        className="rounded-xl"
+                        disabled={!dayWindow.enabled}
+                        value={dayWindow.start}
+                        onChange={(event) =>
+                          setDayWindowsState((prev) => ({
+                            ...(prev ?? dayWindows),
+                            [day.value]: {
+                              ...(prev?.[day.value] ?? dayWindow),
+                              start: event.target.value,
+                            },
+                          }))
+                        }
+                      />
+                      <Input
+                        type="time"
+                        className="rounded-xl"
+                        disabled={!dayWindow.enabled}
+                        value={dayWindow.end}
+                        onChange={(event) =>
+                          setDayWindowsState((prev) => ({
+                            ...(prev ?? dayWindows),
+                            [day.value]: {
+                              ...(prev?.[day.value] ?? dayWindow),
+                              end: event.target.value,
+                            },
+                          }))
+                        }
+                      />
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </Card>

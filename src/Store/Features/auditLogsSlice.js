@@ -19,11 +19,30 @@ export const fetchAuditLogs = createAsyncThunk(
 
 export const createAuditLog = createAsyncThunk(
   "auditLogs/createAuditLog",
-  async (payload, { rejectWithValue }) => {
+  async (payload, { rejectWithValue, getState }) => {
     try {
+      const state = getState();
+      const authUser = state?.auth?.user;
+      const actorUserId = payload?.actor_user_id || authUser?._id || authUser?.id;
+      if (!actorUserId) {
+        return rejectWithValue("Actor user is required");
+      }
+
+      const requestBody = {
+        ...payload,
+        actor_user_id: actorUserId,
+      };
+
+      if (payload?.metadata && !payload?.after_state) {
+        requestBody.after_state = payload.metadata;
+      }
+      if (payload?.module && !payload?.reason) {
+        requestBody.reason = `module:${payload.module}`;
+      }
+
       const response = await apiRequest("/audit-logs", {
         method: "POST",
-        body: JSON.stringify(payload),
+        body: JSON.stringify(requestBody),
       });
       return response?.data;
     } catch (error) {
@@ -65,4 +84,3 @@ const auditLogsSlice = createSlice({
 });
 
 export default auditLogsSlice.reducer;
-

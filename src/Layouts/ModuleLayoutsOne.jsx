@@ -65,11 +65,8 @@ const ModuleLayoutsOne = ({
   deleteModalProps,
 }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(() =>
-    typeof window !== "undefined" ? window.innerWidth < 768 : false,
-  );
   const [hasManualViewSelection, setHasManualViewSelection] = useState(false);
-  const [viewType, setViewType] = useState(() => (isMobile ? "list" : "table"));
+  const [viewType, setViewType] = useState("list");
 
   const openModal = () => setIsModalOpen(true);
   const closeModal = () => setIsModalOpen(false);
@@ -95,13 +92,20 @@ const ModuleLayoutsOne = ({
     typeof tableContent === "function"
       ? tableContent({ viewType, setViewType })
       : tableContent;
+  const shouldRenderTableSection = Boolean(
+    tableContentNode ||
+      shouldUseTablePropsRenderer ||
+      tableTitle ||
+      tableHeaderBadges?.length ||
+      tableHeaderAction ||
+      tableExtra ||
+      typeof totalRecords === "number",
+  );
 
   useEffect(() => {
     const handleResize = () => {
-      const nextIsMobile = window.innerWidth < 768;
-      setIsMobile(nextIsMobile);
       if (!hasManualViewSelection) {
-        setViewType(nextIsMobile ? "list" : "table");
+        setViewType("list");
       }
     };
     window.addEventListener("resize", handleResize);
@@ -157,104 +161,115 @@ const ModuleLayoutsOne = ({
         </div>
       ) : null}
 
-      <div className="px-2">
-        <div
-          className="bg-white rounded-2xl overflow-hidden shadow-sm border"
-          style={{ backgroundColor: COLORS.white, borderColor: "#f1f5f9" }}
-        >
-          <div className="px-6 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <h3 className="text-sm font-semibold" style={{ ...FONT, color: COLORS.black }}>
-                {tableTitle || (isTrashView ? "Deleted" : "All Records")}
-              </h3>
-              {loading ? (
-                <Spin size="small" />
-              ) : tableHeaderBadges && tableHeaderBadges.length ? (
-                tableHeaderBadges.map((badge, index) => (
-                  <span
-                    key={badge?.key || index}
-                    className={
-                      badge?.className ||
-                      "inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold"
-                    }
-                    style={{ 
-                      backgroundColor: "#fff7ed",
-                      color: COLORS.coral,
-                      border: `1px solid #ffedd5`,
-                      ...FONT 
-                    }}
-                  >
-                    {badge?.text}
-                  </span>
-                ))
-              ) : (
-                <span
-                  className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold"
-                  style={{ ...FONT, backgroundColor: "#fff7ed", color: COLORS.coral, border: `1px solid #ffedd5` }}
-                >
-                  {(totalRecords || 0).toLocaleString()} total
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              {shouldShowViewToggle ? (
-                <>
-                  <Button
-                    htmlType="button"
-                    type={viewType === "table" ? "primary" : "default"}
-                    size="small"
-                    onClick={() => {
-                      setHasManualViewSelection(true);
-                      setViewType("table");
-                    }}
-                  >
-                    Table
-                  </Button>
-                  <Button
-                    htmlType="button"
-                    type={viewType === "list" ? "primary" : "default"}
-                    size="small"
-                    onClick={() => {
-                      setHasManualViewSelection(true);
-                      setViewType("list");
-                    }}
-                  >
-                    List
-                  </Button>
-                </>
-              ) : null}
-              {tableHeaderAction || tableExtra || null}
-            </div>
-          </div>
-
-          {tableContentNode ||
-            (shouldUseTablePropsRenderer ? (
-              <>
-                {viewType === "table" ? (
-                  <Table
-                    {...tableProps}
-                    pagination={false}
-                    size={tableProps.size || "middle"}
-                    style={tableProps.style || FONT}
-                    rowClassName={
-                      tableProps.rowClassName ||
-                      (() => "transition-colors cursor-pointer")
-                    }
-                    scroll={tableProps.scroll || { x: 1100, y: 520 }}
-                  />
+      {shouldRenderTableSection ? (
+        <div className="px-2">
+          <div
+            className="bg-white rounded-2xl overflow-hidden shadow-sm border"
+            style={{ backgroundColor: COLORS.white, borderColor: "#f1f5f9" }}
+          >
+            <div className="px-6 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <h3 className="text-sm font-semibold" style={{ ...FONT, color: COLORS.black }}>
+                  {tableTitle || (isTrashView ? "Deleted" : "All Records")}
+                </h3>
+                {loading ? (
+                  <Spin size="small" />
+                ) : tableHeaderBadges && tableHeaderBadges.length ? (
+                  tableHeaderBadges.map((badge, index) => (
+                    <span
+                      key={badge?.key || index}
+                      className={
+                        badge?.className ||
+                        "inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold"
+                      }
+                      style={{
+                        backgroundColor: "#fff7ed",
+                        color: COLORS.coral,
+                        border: `1px solid #ffedd5`,
+                        ...FONT
+                      }}
+                    >
+                      {badge?.text}
+                    </span>
+                  ))
                 ) : (
-                  <ListView
-                    columns={tableProps.columns || []}
-                    dataSource={tableProps.dataSource || []}
-                    rowKey={tableProps.rowKey || "key"}
-                    loading={Boolean(tableProps.loading)}
-                  />
+                  <span
+                    className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold"
+                    style={{ ...FONT, backgroundColor: "#fff7ed", color: COLORS.coral, border: `1px solid #ffedd5` }}
+                  >
+                    {(totalRecords || 0).toLocaleString()} total
+                  </span>
                 )}
-                {pagination ? <TablePagination {...pagination} /> : null}
-              </>
-            ) : null)}
+              </div>
+              <div className="flex items-center gap-2">
+                {shouldShowViewToggle ? (
+                  <>
+                    <Button
+                      htmlType="button"
+                      type={viewType === "table" ? "primary" : "default"}
+                      size="small"
+                      onClick={() => {
+                        setHasManualViewSelection(true);
+                        setViewType("table");
+                      }}
+                    >
+                      Table
+                    </Button>
+                    <Button
+                      htmlType="button"
+                      type={viewType === "list" ? "primary" : "default"}
+                      size="small"
+                      onClick={() => {
+                        setHasManualViewSelection(true);
+                        setViewType("list");
+                      }}
+                    >
+                      List
+                    </Button>
+                  </>
+                ) : null}
+                {tableHeaderAction || tableExtra || null}
+              </div>
+            </div>
+
+            {tableContentNode ||
+              (shouldUseTablePropsRenderer ? (
+                <>
+                  {viewType === "table" ? (
+                    <Table
+                      {...tableProps}
+                      pagination={false}
+                      size={tableProps.size || "middle"}
+                      style={tableProps.style || FONT}
+                      rowClassName={
+                        tableProps.rowClassName ||
+                        (() => "transition-colors cursor-pointer")
+                      }
+                      scroll={tableProps.scroll || { x: 1100, y: 520 }}
+                    />
+                  ) : (
+                    <ListView
+                      columns={tableProps.columns || []}
+                      dataSource={tableProps.dataSource || []}
+                      rowKey={tableProps.rowKey || "key"}
+                      loading={Boolean(tableProps.loading)}
+                      onRowClick={(row) => {
+                        const onRowConfig =
+                          typeof tableProps.onRow === "function"
+                            ? tableProps.onRow(row)
+                            : null;
+                        if (typeof onRowConfig?.onClick === "function") {
+                          onRowConfig.onClick();
+                        }
+                      }}
+                    />
+                  )}
+                  {pagination ? <TablePagination {...pagination} /> : null}
+                </>
+              ) : null)}
+          </div>
         </div>
-      </div>
+      ) : null}
 
       {modalContent && (
         <Drawer

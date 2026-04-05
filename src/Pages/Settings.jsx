@@ -76,13 +76,6 @@ const Settings = () => {
           </Card>
         </div>
       }
-      tableTitle=""
-      totalRecords={0}
-      tableProps={{
-        columns: [],
-        dataSource: [],
-        pagination: false,
-      }}
     />
   );
 };

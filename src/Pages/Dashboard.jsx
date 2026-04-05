@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Button } from "antd";
 import { toast } from "sonner";
@@ -24,7 +24,7 @@ import {
   resumeAssignmentQuick,
 } from "../Store/Features/assignmentsSlice";
 import { createSwapRequest, fetchSwapRequests } from "../Store/Features/swapRequestsSlice";
-import { fetchAuditLogs } from "../Store/Features/auditLogsSlice";
+import { createAuditLog, fetchAuditLogs } from "../Store/Features/auditLogsSlice";
 import { fetchAvailabilityByUser } from "../Store/Features/availabilitySlice";
 import { colTitle } from "../SharedComponents/ColumnComponents/ColumnTitle";
 import ColumnData from "../SharedComponents/ColumnComponents/ColumnData";
@@ -41,6 +41,15 @@ const formatDateTime = (value) => {
 };
 
 const getId = (value) => (typeof value === "object" ? value?._id || value?.id : value);
+const toErrorMessage = (payload, fallback) => {
+  if (typeof payload === "string") return payload;
+  if (payload && typeof payload === "object") {
+    if (typeof payload.message === "string") return payload.message;
+    const firstText = Object.values(payload).find((item) => typeof item === "string");
+    if (firstText) return firstText;
+  }
+  return fallback;
+};
 const getAssignmentId = (assignment) =>
   String(
     assignment?._id ||
@@ -86,6 +95,8 @@ const Dashboard = () => {
   const { list: swapRequests, saving: swapSaving } = useSelector((state) => state.swapRequests);
   const { list: auditLogs } = useSelector((state) => state.auditLogs);
   const userAvailability = useSelector((state) => state.availability.byUser[currentUserId]);
+  const [viewOpen, setViewOpen] = useState(false);
+  const [viewingShift, setViewingShift] = useState(null);
 
   useEffect(() => {
     dispatch(fetchShifts());
@@ -265,6 +276,10 @@ const Dashboard = () => {
           type="text"
           className="h-8 w-8 flex items-center justify-center rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-700"
           icon={<EyeOutlined style={{ fontSize: 12 }} />}
+          onClick={() => {
+            setViewingShift(record);
+            setViewOpen(true);
+          }}
           aria-label={`View shift ${record.shiftId?.slice?.(-6) || ""}`}
         />
       ),
@@ -333,6 +348,19 @@ const Dashboard = () => {
       }).length,
     [swapRequests, currentUserId],
   );
+  const myPendingSwapAssignmentIds = useMemo(
+    () =>
+      new Set(
+        (swapRequests || [])
+          .filter((request) => {
+            const requesterId = String(getId(request?.requester_id) || request?.requester_id || "");
+            return requesterId === String(currentUserId || "") && String(request?.status || "").toLowerCase().includes("pending");
+          })
+          .map((request) => String(getId(request?.from_assignment_id) || request?.from_assignment_id || ""))
+          .filter(Boolean),
+      ),
+    [swapRequests, currentUserId],
+  );
 
   const runQuickAction = async (action, assignmentIdOverride) => {
     const assignmentId = assignmentIdOverride || activeAssignment?.assignment_id;
@@ -377,6 +405,10 @@ const Dashboard = () => {
 
   const requestSwap = async (assignment) => {
     if (!assignment?.shiftId || !assignment?.id || !currentUserId) return;
+    if (myPendingSwapAssignmentIds.has(String(assignment.id))) {
+      toast.error("Swap already requested for this shift.");
+      return;
+    }
     const result = await dispatch(
       createSwapRequest({
         type: "swap",
@@ -386,10 +418,24 @@ const Dashboard = () => {
       }),
     );
     if (createSwapRequest.fulfilled.match(result)) {
+      const createdRequest = result?.payload;
+      dispatch(
+        createAuditLog({
+          actor_user_id: currentUserId,
+          action: "swap_request_created",
+          module: "swap_requests",
+          entity_type: "swap_request",
+          after_state: {
+            swap_request_id: String(getId(createdRequest) || ""),
+            requester_id: currentUserId,
+            assignment_id: assignment.id,
+          },
+        }),
+      );
       toast.success("Swap request submitted");
       dispatch(fetchSwapRequests());
     } else {
-      toast.error(result?.payload || "Failed to request swap");
+      toast.error(toErrorMessage(result?.payload, "Failed to request swap"));
     }
   };
 
@@ -521,8 +567,15 @@ const Dashboard = () => {
                               </Button>
                             </>
                           ) : null}
-                          <Button size="small" loading={swapSaving} onClick={() => requestSwap(shift)}>
-                            Request Swap
+                          <Button
+                            size="small"
+                            loading={swapSaving}
+                            disabled={myPendingSwapAssignmentIds.has(String(shift.id))}
+                            onClick={() => requestSwap(shift)}
+                          >
+                            {myPendingSwapAssignmentIds.has(String(shift.id))
+                              ? "Requested Swap"
+                              : "Request Swap"}
                           </Button>
                         </div>
                       </div>
@@ -533,6 +586,41 @@ const Dashboard = () => {
             </div>
           </div>
         )}
+        secondaryModalOpen={viewOpen}
+        onSecondaryModalClose={() => {
+          setViewOpen(false);
+          setViewingShift(null);
+        }}
+        secondaryModalTitle="Shift Details"
+        secondaryModalSubtitle="Detailed shift information."
+        secondaryModalContent={
+          viewingShift ? (
+            <div className="space-y-4 text-sm">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Location</p>
+                <p className="font-semibold text-slate-800">{viewingShift?.location || viewingShift?.details?.location || "N/A"}</p>
+              </div>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Shift</p>
+                <p className="font-semibold text-slate-800">{viewingShift?.title || viewingShift?.shift || "N/A"}</p>
+              </div>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Schedule</p>
+                <p className="font-semibold text-slate-800">
+                  {viewingShift?.time?.range || `${formatDateTime(viewingShift?.start)} - ${formatDateTime(viewingShift?.end)}`}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Timezone</p>
+                <p className="font-semibold text-slate-800">{viewingShift?.timezone || viewingShift?.time?.timezone || "N/A"}</p>
+              </div>
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Status</p>
+                <p className="font-semibold text-slate-800">{viewingShift?.status || "N/A"}</p>
+              </div>
+            </div>
+          ) : null
+        }
       />
     );
   }
@@ -555,7 +643,46 @@ const Dashboard = () => {
         columns,
         dataSource: rows,
         loading: shiftsLoading || assignmentsLoading,
+        onRow: (record) => ({
+          onClick: () => {
+            setViewingShift(record);
+            setViewOpen(true);
+          },
+        }),
       }}
+      secondaryModalOpen={viewOpen}
+      onSecondaryModalClose={() => {
+        setViewOpen(false);
+        setViewingShift(null);
+      }}
+      secondaryModalTitle="Shift Details"
+      secondaryModalSubtitle="Detailed shift information."
+      secondaryModalContent={
+        viewingShift ? (
+          <div className="space-y-4 text-sm">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Location</p>
+              <p className="font-semibold text-slate-800">{viewingShift?.details?.location || "N/A"}</p>
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Skill</p>
+              <p className="font-semibold text-slate-800">{viewingShift?.details?.skill || "N/A"}</p>
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Assigned Staff</p>
+              <p className="font-semibold text-slate-800">{viewingShift?.staff || "N/A"}</p>
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Schedule</p>
+              <p className="font-semibold text-slate-800">{viewingShift?.time?.range || "N/A"}</p>
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Timezone</p>
+              <p className="font-semibold text-slate-800">{viewingShift?.time?.timezone || "N/A"}</p>
+            </div>
+          </div>
+        ) : null
+      }
     />
   );
 };

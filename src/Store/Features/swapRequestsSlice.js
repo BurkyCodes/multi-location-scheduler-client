@@ -61,6 +61,40 @@ export const managerDecisionSwapRequest = createAsyncThunk(
   },
 );
 
+export const acceptSwapRequest = createAsyncThunk(
+  "swapRequests/acceptSwapRequest",
+  async ({ id, accepted_by_user_id, note }, { rejectWithValue }) => {
+    const payload = {
+      accepted_by_user_id,
+      claimed_by_user_id: accepted_by_user_id,
+      target_user_id: accepted_by_user_id,
+      note,
+    };
+    const attempts = [
+      { path: `/swap-requests/${id}/accept`, method: "POST", body: payload },
+      { path: `/swap-requests/${id}/peer-accept`, method: "POST", body: payload },
+      { path: `/swap-requests/${id}/staff-accept`, method: "POST", body: payload },
+      { path: `/swap-requests/${id}`, method: "PATCH", body: { ...payload, status: "pending_manager_approval" } },
+    ];
+    try {
+      for (const attempt of attempts) {
+        try {
+          const response = await apiRequest(attempt.path, {
+            method: attempt.method,
+            body: JSON.stringify(attempt.body),
+          });
+          return response?.data;
+        } catch (error) {
+          if (error?.status !== 404) throw error;
+        }
+      }
+      throw new Error("Swap accept route not found on backend");
+    } catch (error) {
+      return rejectWithValue(getErrorMessage(error, "Failed to accept swap request"));
+    }
+  },
+);
+
 const swapRequestsSlice = createSlice({
   name: "swapRequests",
   initialState,
@@ -97,9 +131,23 @@ const swapRequestsSlice = createSlice({
         state.list = state.list.map((item) => (getId(item) === id ? updated : item));
       })
       .addCase(managerDecisionSwapRequest.fulfilled, (state, action) => {
+        const updated = action.payload?.swap_request || action.payload;
+        const id = getId(updated);
+        state.list = state.list.map((item) => (getId(item) === id ? updated : item));
+      })
+      .addCase(acceptSwapRequest.pending, (state) => {
+        state.saving = true;
+        state.error = null;
+      })
+      .addCase(acceptSwapRequest.fulfilled, (state, action) => {
+        state.saving = false;
         const updated = action.payload;
         const id = getId(updated);
         state.list = state.list.map((item) => (getId(item) === id ? updated : item));
+      })
+      .addCase(acceptSwapRequest.rejected, (state, action) => {
+        state.saving = false;
+        state.error = action.payload;
       });
   },
 });
