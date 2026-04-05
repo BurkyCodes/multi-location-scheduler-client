@@ -1,7 +1,7 @@
 import React from "react";
 import { Avatar, Tooltip, Empty, Spin } from "antd";
 import dayjs from "dayjs";
-import { getEventColor, getAssigneeShortName } from "../../utils/crm-calendar";
+import { getEventColor, getAssigneeShortName } from "../../Utils/listviewhelper";
 import {
   UserOutlined,
   ClockCircleOutlined,
