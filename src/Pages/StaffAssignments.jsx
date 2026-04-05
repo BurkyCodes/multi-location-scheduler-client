@@ -9,6 +9,7 @@ import {
   deleteAssignment,
   fetchAssignments,
   fetchCoverageRecommendations,
+  recoverClockOutAssignmentQuick,
 } from "../Store/Features/assignmentsSlice";
 import { fetchShifts } from "../Store/Features/shiftsSlice";
 import { fetchStaff } from "../Store/Features/staffSlice";
@@ -77,6 +78,7 @@ const StaffAssignments = () => {
   const recommendationsLoading = useSelector(
     (state) => state.assignments.recommendationsLoading,
   );
+  const quickActionLoading = useSelector((state) => state.assignments.quickActionLoading);
   const shifts = useSelector((state) => state.shifts.list);
   const staff = useSelector((state) => state.staff.list);
   const locations = useSelector((state) => state.locations.list);
@@ -173,6 +175,7 @@ const StaffAssignments = () => {
         location: shiftLocation?.name || "Unknown Location",
         timezone: normalizeTimezone(shift?.location_timezone || shift?.timezone),
         status: assignment?.status || "assigned",
+        workStatus: assignment?.work_status || "not_started",
         assignedBy:
           assignment?.assigned_by?.name ||
           assignment?.assigned_by?.email ||
@@ -253,6 +256,36 @@ const StaffAssignments = () => {
     }
   };
 
+  const handleRecoverClockOut = async (row) => {
+    const assignmentId = row?.key;
+    if (!assignmentId) return;
+
+    const reason = window.prompt(
+      "Enter a reason for recovering this missing clock-out:",
+      "Device/network issue prevented normal clock-out",
+    );
+    if (!reason) return;
+
+    const result = await dispatch(
+      recoverClockOutAssignmentQuick({
+        assignmentId,
+        reason,
+      }),
+    );
+
+    if (recoverClockOutAssignmentQuick.fulfilled.match(result)) {
+      toast.success("Missing clock-out recovered");
+      dispatch(fetchAssignments());
+      return;
+    }
+
+    const payload = result?.payload;
+    toast.error(
+      (payload && typeof payload === "object" && payload.message) ||
+        (typeof payload === "string" ? payload : "Failed to recover missing clock-out"),
+    );
+  };
+
   const columns = [
     {
       title: colTitle("Staff"),
@@ -290,6 +323,16 @@ const StaffAssignments = () => {
       render: (_, row) =>
         canManageAssignments ? (
           <div className="flex items-center gap-2">
+            {(row?.workStatus === "clocked_in" || row?.workStatus === "paused") ? (
+              <Button
+                type="default"
+                className="h-8 rounded-lg border-slate-200 text-slate-700"
+                loading={quickActionLoading}
+                onClick={() => handleRecoverClockOut(row)}
+              >
+                Recover Clock-Out
+              </Button>
+            ) : null}
             <Button
               danger
               type="text"

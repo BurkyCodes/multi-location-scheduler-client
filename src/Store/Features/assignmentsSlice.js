@@ -167,6 +167,26 @@ export const clockOutAssignmentQuick = createAsyncThunk(
   },
 );
 
+export const recoverClockOutAssignmentQuick = createAsyncThunk(
+  "assignments/recoverClockOutQuick",
+  async ({ assignmentId, reason, clock_out_utc } = {}, { rejectWithValue }) => {
+    try {
+      const response = await apiRequest(`/assignments/${assignmentId}/recover-clock-out`, {
+        method: "POST",
+        body: JSON.stringify({
+          reason,
+          ...(clock_out_utc ? { clock_out_utc } : {}),
+        }),
+      });
+      return response?.data;
+    } catch (error) {
+      return rejectWithValue(
+        getAssignmentErrorPayload(error, "Failed to recover missing clock-out"),
+      );
+    }
+  },
+);
+
 const assignmentsSlice = createSlice({
   name: "assignments",
   initialState,
@@ -303,6 +323,16 @@ const assignmentsSlice = createSlice({
         state.quickActionLoading = false;
       })
       .addCase(clockOutAssignmentQuick.rejected, (state, action) => {
+        state.quickActionLoading = false;
+        state.error = action.payload || state.error;
+      })
+      .addCase(recoverClockOutAssignmentQuick.pending, (state) => {
+        state.quickActionLoading = true;
+      })
+      .addCase(recoverClockOutAssignmentQuick.fulfilled, (state) => {
+        state.quickActionLoading = false;
+      })
+      .addCase(recoverClockOutAssignmentQuick.rejected, (state, action) => {
         state.quickActionLoading = false;
         state.error = action.payload || state.error;
       });

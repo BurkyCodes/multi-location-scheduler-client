@@ -43,6 +43,21 @@ const STATUS_META = {
     className: "bg-amber-50 text-amber-700 border-amber-200",
     label: "pending",
   },
+  processing: {
+    icon: <ClockCircleOutlined className="text-[10px]" />,
+    className: "bg-indigo-50 text-indigo-700 border-indigo-200",
+    label: "processing",
+  },
+  pending_manager_approval: {
+    icon: <ClockCircleOutlined className="text-[10px]" />,
+    className: "bg-amber-50 text-amber-700 border-amber-200",
+    label: "pending manager approval",
+  },
+  pending_peer_acceptance: {
+    icon: <ClockCircleOutlined className="text-[10px]" />,
+    className: "bg-amber-50 text-amber-700 border-amber-200",
+    label: "pending peer acceptance",
+  },
   clocked_in: {
     icon: <CheckCircleOutlined className="text-[10px]" />,
     className: "bg-emerald-50 text-emerald-700 border-emerald-200",

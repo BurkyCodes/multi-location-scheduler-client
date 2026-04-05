@@ -50,6 +50,10 @@ const toErrorMessage = (payload, fallback) => {
   }
   return fallback;
 };
+const isPendingLikeStatus = (status) => {
+  const normalized = String(status || "").toLowerCase();
+  return normalized.includes("pending") || normalized === "processing";
+};
 const timezoneCodeToIana = (value) => {
   const normalized = String(value || "").trim().toUpperCase();
   if (
@@ -406,7 +410,7 @@ const Swaps = () => {
     () =>
       list.filter((item) => {
         const requesterId = String(getId(item?.requester_id) || item?.requester_id || "");
-        return requesterId === String(userId || "") && String(item?.status || "").toLowerCase().includes("pending");
+        return requesterId === String(userId || "") && isPendingLikeStatus(item?.status);
       }),
     [list, userId],
   );
@@ -416,8 +420,8 @@ const Swaps = () => {
       .filter((item) => {
         const requesterId = String(getId(item?.requester_id) || item?.requester_id || "");
         return (
-          requesterId === String(userId || "") &&
-          String(item?.status || "").toLowerCase().includes("pending")
+            requesterId === String(userId || "") &&
+          isPendingLikeStatus(item?.status)
         );
       })
       .map((item) => String(getId(item?.from_assignment_id) || item?.from_assignment_id || ""))
@@ -428,7 +432,7 @@ const Swaps = () => {
     () =>
       list.filter((item) => {
         const requesterId = String(getId(item?.requester_id) || item?.requester_id || "");
-        return requesterId !== String(userId || "") && String(item?.status || "").toLowerCase().includes("pending");
+        return requesterId !== String(userId || "") && isPendingLikeStatus(item?.status);
       }),
     [list, userId],
   );
@@ -534,7 +538,7 @@ const Swaps = () => {
       title: colTitle("Action"),
       key: "action",
       render: (_, row) => {
-        const isPending = String(row.status || "").toLowerCase().includes("pending");
+        const isPending = isPendingLikeStatus(row.status);
         const hasAcceptedUser = Boolean(row.acceptedById);
         if (isPending && canApprove && hasAcceptedUser) {
           return (
@@ -801,7 +805,7 @@ const Swaps = () => {
       }
       headerAction={
         <div className="inline-flex items-center px-3 py-2 rounded-xl bg-amber-50 border border-amber-100 text-amber-700 text-xs font-bold">
-          Pending: {rows.filter((row) => String(row.status || "").toLowerCase().includes("pending")).length}
+          Pending: {rows.filter((row) => isPendingLikeStatus(row.status)).length}
         </div>
       }
       tableTitle="Swap Requests"

@@ -63,6 +63,10 @@ const toErrorMessage = (payload, fallback) => {
   }
   return fallback;
 };
+const isPendingLikeStatus = (status) => {
+  const normalized = String(status || "").toLowerCase();
+  return normalized.includes("pending") || normalized === "processing";
+};
 const getAssignmentId = (assignment) =>
   String(
     assignment?._id ||
@@ -583,7 +587,7 @@ const Shifts = () => {
     () =>
       (swapRequests || []).filter((request) => {
         const requesterId = String(getId(request?.requester_id) || request?.requester_id || "");
-        return requesterId === String(currentUserId || "") && String(request?.status || "").toLowerCase().includes("pending");
+        return requesterId === String(currentUserId || "") && isPendingLikeStatus(request?.status);
       }).length,
     [swapRequests, currentUserId],
   );
@@ -593,7 +597,7 @@ const Shifts = () => {
         (swapRequests || [])
           .filter((request) => {
             const requesterId = String(getId(request?.requester_id) || request?.requester_id || "");
-            return requesterId === String(currentUserId || "") && String(request?.status || "").toLowerCase().includes("pending");
+            return requesterId === String(currentUserId || "") && isPendingLikeStatus(request?.status);
           })
           .map((request) => String(getId(request?.from_assignment_id) || request?.from_assignment_id || ""))
           .filter(Boolean),
@@ -604,7 +608,7 @@ const Shifts = () => {
     () =>
       (swapRequests || []).filter((request) => {
         const requesterId = String(getId(request?.requester_id) || request?.requester_id || "");
-        return requesterId === String(currentUserId || "") && String(request?.status || "").toLowerCase().includes("pending");
+        return requesterId === String(currentUserId || "") && isPendingLikeStatus(request?.status);
       }),
     [swapRequests, currentUserId],
   );
