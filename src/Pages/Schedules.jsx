@@ -9,7 +9,7 @@ import { fetchLocations } from "../Store/Features/locationsSlice";
 import { colTitle } from "../SharedComponents/ColumnComponents/ColumnTitle";
 import ColumnData from "../SharedComponents/ColumnComponents/ColumnData";
 import StatusBadge from "../SharedComponents/ColumnComponents/StatusBadge";
-import { hasRole } from "../utils/roles";
+import { hasRole } from "../Utils/roles";
 
 const FONT = { fontFamily: "'Montserrat', sans-serif" };
 const FONT_SM = { ...FONT, fontSize: 12 };

@@ -63,7 +63,10 @@ const Notifications = () => {
     if (!id) return;
     if (String(item?.status).toLowerCase() === "unread") {
       await dispatch(markNotificationRead(id));
-      if (userId) dispatch(fetchUnreadCount(userId));
+      if (userId) {
+        await dispatch(fetchNotificationsFeed({ orgUserId: userId, page: 1, limit: 100 }));
+        dispatch(fetchUnreadCount(userId));
+      }
     }
     navigateToNotificationLink(item?.link);
   };

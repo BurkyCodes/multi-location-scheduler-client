@@ -20,7 +20,7 @@ import {
 import {CoffeeOutlined} from "@ant-design/icons";
 import { Outlet, useNavigate, useLocation } from "react-router-dom";
 import { logoutUser } from "../Store/Features/authSlice";
-import { hasRole } from "../utils/roles";
+import { hasRole } from "../Utils/roles";
 import NotificationsBootstrap from "./NotificationsBootstrap";
 
 const { Sider, Content, Header } = Layout;

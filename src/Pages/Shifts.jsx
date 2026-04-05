@@ -23,7 +23,7 @@ import {
 } from "../Store/Features/assignmentsSlice";
 import { createSwapRequest, fetchSwapRequests } from "../Store/Features/swapRequestsSlice";
 import { createAuditLog } from "../Store/Features/auditLogsSlice";
-import { hasRole } from "../utils/roles";
+import { hasRole } from "../Utils/roles";
 
 const FONT = { fontFamily: "'Montserrat', sans-serif" };
 const FONT_SM = { ...FONT, fontSize: 12 };

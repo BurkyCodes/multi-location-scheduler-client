@@ -31,7 +31,7 @@ import ColumnData from "../SharedComponents/ColumnComponents/ColumnData";
 import StatusBadge from "../SharedComponents/ColumnComponents/StatusBadge";
 import StatCard from "../SharedComponents/StatCard";
 import ActionAuditTable from "../SharedComponents/ActionAuditTable";
-import { hasRole } from "../utils/roles";
+import { hasRole } from "../Utils/roles";
 
 const formatDateTime = (value) => {
   if (!value) return "N/A";

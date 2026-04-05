@@ -23,7 +23,7 @@ import {
 } from "../Store/Features/skillsSlice";
 import { fetchStaff } from "../Store/Features/staffSlice";
 import { fetchLocations } from "../Store/Features/locationsSlice";
-import { hasRole } from "../utils/roles";
+import { hasRole } from "../Utils/roles";
 
 const getId = (value) => (typeof value === "object" ? value?._id || value?.id : value);
 

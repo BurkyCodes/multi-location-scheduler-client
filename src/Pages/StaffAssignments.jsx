@@ -16,7 +16,7 @@ import { fetchLocations } from "../Store/Features/locationsSlice";
 import { colTitle } from "../SharedComponents/ColumnComponents/ColumnTitle";
 import ColumnData from "../SharedComponents/ColumnComponents/ColumnData";
 import StatusBadge from "../SharedComponents/ColumnComponents/StatusBadge";
-import { hasRole } from "../utils/roles";
+import { hasRole } from "../Utils/roles";
 import ConstraintViolationsModal from "../SharedComponents/Modals/ConstraintViolationsModal";
 
 const getId = (value) => (typeof value === "object" ? value?._id || value?.id : value);
