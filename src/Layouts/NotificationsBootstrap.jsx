@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { Cookies } from "../Services/cookies";
 import {
   fetchUnreadCount,
   prependNotification,
@@ -10,11 +11,48 @@ import {
 } from "../Store/Features/notificationsSlice";
 import { getWebPushToken, subscribeForegroundPush } from "../Services/pushNotifications";
 import { fetchNotificationPreferenceByUser } from "../Store/Features/preferencesSlice";
+import { fetchSchedules } from "../Store/Features/schedulesSlice";
+import { fetchShifts } from "../Store/Features/shiftsSlice";
+import {
+  fetchAssignments,
+  fetchMyShiftTracking,
+} from "../Store/Features/assignmentsSlice";
+import { fetchSwapRequests } from "../Store/Features/swapRequestsSlice";
 
 const ensureLeadingSlash = (path) => {
   if (!path) return "";
   if (String(path).startsWith("http://") || String(path).startsWith("https://")) return path;
   return String(path).startsWith("/") ? path : `/${path}`;
+};
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
+const REALTIME_STATUS_EVENT = "realtime-connection-status";
+
+const getAccessToken = () =>
+  Cookies.get("access_token") ||
+  localStorage.getItem("access_token") ||
+  localStorage.getItem("accessToken") ||
+  "";
+
+const parseEventPayload = (raw) => {
+  if (!raw) return {};
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+};
+
+const broadcastRealtimeStatus = (status) => {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent(REALTIME_STATUS_EVENT, {
+      detail: {
+        status,
+        at: new Date().toISOString(),
+      },
+    })
+  );
 };
 
 const NotificationsBootstrap = () => {
@@ -83,6 +121,84 @@ const NotificationsBootstrap = () => {
     if (!storedToken) return;
     dispatch(unregisterPushToken({ fcm_token: storedToken }));
   }, [dispatch, userId, inAppEnabled]);
+
+  useEffect(() => {
+    if (!userId) return undefined;
+    const token = getAccessToken();
+    if (!token) {
+      broadcastRealtimeStatus("offline");
+      return undefined;
+    }
+
+    const stream = new EventSource(
+      `${API_BASE_URL}/realtime/stream?token=${encodeURIComponent(token)}`
+    );
+    let offlineTimer = null;
+
+    stream.onopen = () => {
+      if (offlineTimer) {
+        clearTimeout(offlineTimer);
+        offlineTimer = null;
+      }
+      broadcastRealtimeStatus("connected");
+    };
+
+    stream.onerror = () => {
+      broadcastRealtimeStatus("reconnecting");
+      if (offlineTimer) clearTimeout(offlineTimer);
+      offlineTimer = setTimeout(() => {
+        broadcastRealtimeStatus("offline");
+      }, 15000);
+    };
+
+    const refreshSchedules = () => dispatch(fetchSchedules());
+    const refreshShifts = () => dispatch(fetchShifts());
+    const refreshAssignments = () => {
+      dispatch(fetchAssignments());
+      dispatch(fetchMyShiftTracking());
+    };
+    const refreshSwaps = () => dispatch(fetchSwapRequests());
+
+    stream.addEventListener("schedule_changed", () => {
+      refreshSchedules();
+    });
+    stream.addEventListener("shift_changed", () => {
+      refreshShifts();
+      refreshAssignments();
+    });
+    stream.addEventListener("assignment_changed", () => {
+      refreshAssignments();
+    });
+    stream.addEventListener("swap_changed", () => {
+      refreshSwaps();
+    });
+    stream.addEventListener("clock_changed", () => {
+      refreshAssignments();
+    });
+    stream.addEventListener("notification_created", (event) => {
+      const payload = parseEventPayload(event?.data);
+      if (payload?.notification_id && inAppEnabled) {
+        dispatch(
+          prependNotification({
+            _id: payload.notification_id,
+            title: payload.title || "Notification",
+            message: payload.message || "",
+            status: "unread",
+            category: payload.category || "general",
+            createdAt: payload.createdAt || new Date().toISOString(),
+            data: payload || {},
+          })
+        );
+      }
+      dispatch(fetchUnreadCount(userId));
+    });
+
+    return () => {
+      if (offlineTimer) clearTimeout(offlineTimer);
+      broadcastRealtimeStatus("offline");
+      stream.close();
+    };
+  }, [dispatch, inAppEnabled, userId]);
 
   useEffect(() => {
     let unsubscribe = () => {};

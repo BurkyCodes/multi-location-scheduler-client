@@ -88,6 +88,8 @@ const StaffAssignments = () => {
 
   const [selectedShiftId, setSelectedShiftId] = useState("");
   const [selectedStaffId, setSelectedStaffId] = useState("");
+  const [seventhDayOverrideEnabled, setSeventhDayOverrideEnabled] = useState(false);
+  const [seventhDayOverrideReason, setSeventhDayOverrideReason] = useState("");
   const [constraintModal, setConstraintModal] = useState({
     open: false,
     title: "Assignment constraint violation",
@@ -200,11 +202,17 @@ const StaffAssignments = () => {
   const resetForm = () => {
     setSelectedShiftId("");
     setSelectedStaffId("");
+    setSeventhDayOverrideEnabled(false);
+    setSeventhDayOverrideReason("");
   };
 
   const saveAssignment = async (closeModal) => {
     if (!selectedShiftId || !selectedStaffId) {
       toast.error("Select both shift and staff member");
+      return;
+    }
+    if (seventhDayOverrideEnabled && !String(seventhDayOverrideReason || "").trim()) {
+      toast.error("Override reason is required when 7th day override is enabled");
       return;
     }
 
@@ -213,12 +221,29 @@ const StaffAssignments = () => {
       user_id: selectedStaffId,
       status: "assigned",
       ...(currentUser?._id ? { assigned_by: currentUser._id } : {}),
+      ...(seventhDayOverrideEnabled
+        ? {
+            manager_override: {
+              is_override: true,
+              override_type: "seventh_consecutive_day",
+              reason: seventhDayOverrideReason,
+              approved_by: currentUser?._id,
+              approved_at: new Date().toISOString(),
+            },
+          }
+        : {}),
     };
 
     const result = await dispatch(createAssignment(payload));
 
     if (createAssignment.fulfilled.match(result)) {
       toast.success("Assignment created");
+      const warnings = Array.isArray(result?.payload?.warnings) ? result.payload.warnings : [];
+      if (warnings.length > 0) {
+        warnings.slice(0, 3).forEach((warning) => {
+          toast.warning(warning?.message || "Labor compliance warning");
+        });
+      }
       resetForm();
       closeModal();
       dispatch(fetchAssignments());
@@ -234,6 +259,14 @@ const StaffAssignments = () => {
         : suggestions;
 
       if (violations.length) {
+        const requiresSeventhDayOverride = violations.some(
+          (item) => item?.rule === "seventh_day_override_required",
+        );
+        if (requiresSeventhDayOverride) {
+          toast.error(
+            "7th consecutive day requires manager override. Enable override and provide a reason.",
+          );
+        }
         setConstraintModal({
           open: true,
           title,
@@ -407,6 +440,28 @@ const StaffAssignments = () => {
                       ? `${recommendations.length} staff recommendation(s) based on shift fit and availability.`
                       : "Select a shift to load availability-based recommendations."}
                 </p>
+              ) : null}
+            </div>
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+              <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-amber-800">
+                <input
+                  type="checkbox"
+                  checked={seventhDayOverrideEnabled}
+                  onChange={(event) => setSeventhDayOverrideEnabled(event.target.checked)}
+                />
+                7th Day Override
+              </label>
+              <p className="mt-1 text-[11px] text-amber-700">
+                Use only when assignment hits 7th consecutive workday. Reason is required.
+              </p>
+              {seventhDayOverrideEnabled ? (
+                <textarea
+                  className="mt-2 w-full rounded-lg border border-amber-300 bg-white p-2 text-xs text-slate-700"
+                  rows={3}
+                  value={seventhDayOverrideReason}
+                  onChange={(event) => setSeventhDayOverrideReason(event.target.value)}
+                  placeholder="Document the compliance override reason..."
+                />
               ) : null}
             </div>
             <div className="mt-auto flex items-center justify-between">

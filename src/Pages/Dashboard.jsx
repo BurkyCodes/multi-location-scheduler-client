@@ -26,6 +26,7 @@ import {
 import { createSwapRequest, fetchSwapRequests } from "../Store/Features/swapRequestsSlice";
 import { createAuditLog, fetchAuditLogs } from "../Store/Features/auditLogsSlice";
 import { fetchAvailabilityByUser } from "../Store/Features/availabilitySlice";
+import { fetchLaborAlerts } from "../Store/Features/laborAlertsSlice";
 import { colTitle } from "../SharedComponents/ColumnComponents/ColumnTitle";
 import ColumnData from "../SharedComponents/ColumnComponents/ColumnData";
 import StatusBadge from "../SharedComponents/ColumnComponents/StatusBadge";
@@ -94,6 +95,9 @@ const Dashboard = () => {
   const quickActionLoading = useSelector((state) => state.assignments.quickActionLoading);
   const { list: swapRequests, saving: swapSaving } = useSelector((state) => state.swapRequests);
   const { list: auditLogs } = useSelector((state) => state.auditLogs);
+  const { list: laborAlerts, loading: laborAlertsLoading } = useSelector(
+    (state) => state.laborAlerts,
+  );
   const userAvailability = useSelector((state) => state.availability.byUser[currentUserId]);
   const [viewOpen, setViewOpen] = useState(false);
   const [viewingShift, setViewingShift] = useState(null);
@@ -109,6 +113,7 @@ const Dashboard = () => {
     if (!isStaffUser) {
       dispatch(fetchStaff());
       dispatch(fetchAuditLogs({ limit: 10 }));
+      dispatch(fetchLaborAlerts());
     }
     if (isStaffUser && currentUserId) dispatch(fetchAvailabilityByUser(currentUserId));
   }, [dispatch, isStaffUser, currentUserId]);
@@ -295,6 +300,11 @@ const Dashboard = () => {
     </div>
   );
 
+  const openLaborAlerts = useMemo(
+    () => (laborAlerts || []).filter((item) => !item?.resolved_at),
+    [laborAlerts],
+  );
+
   const statsWithActions = useMemo(
     () => (
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 sm:gap-6">
@@ -303,12 +313,31 @@ const Dashboard = () => {
             <StatCard key={item?.key || index} {...item} />
           ))}
         </div>
-        <div className="xl:col-span-1">
+        <div className="xl:col-span-1 space-y-4">
           <ActionAuditTable items={auditLogs.slice(0, 8)} />
+          <div className="rounded-2xl border border-rose-100 bg-rose-50 p-4">
+            <div className="text-xs font-bold uppercase tracking-wide text-rose-700">
+              Labor Compliance
+            </div>
+            <div className="mt-1 text-sm font-semibold text-rose-800">
+              {openLaborAlerts.length} open alert(s)
+            </div>
+            <div className="mt-2 space-y-2">
+              {(openLaborAlerts || []).slice(0, 3).map((alert) => (
+                <div key={alert?._id || alert?.id} className="rounded-lg bg-white p-2 text-xs text-slate-700">
+                  <div className="font-bold text-slate-800">{alert?.type || "Labor alert"}</div>
+                  <div>{alert?.message || "Compliance warning"}</div>
+                </div>
+              ))}
+              {laborAlertsLoading ? (
+                <div className="text-xs text-slate-500">Loading labor alerts...</div>
+              ) : null}
+            </div>
+          </div>
         </div>
       </div>
     ),
-    [statCards, auditLogs],
+    [statCards, auditLogs, openLaborAlerts, laborAlertsLoading],
   );
 
   const availabilitySummary = useMemo(() => {
@@ -405,6 +434,10 @@ const Dashboard = () => {
 
   const requestSwap = async (assignment) => {
     if (!assignment?.shiftId || !assignment?.id || !currentUserId) return;
+    if (myPendingSwapCount >= 3) {
+      toast.error("You can only have up to 3 pending swap/drop requests at a time.");
+      return;
+    }
     if (myPendingSwapAssignmentIds.has(String(assignment.id))) {
       toast.error("Swap already requested for this shift.");
       return;
@@ -638,6 +671,7 @@ const Dashboard = () => {
         {
           text: `${assignments.length ? assignments.length : shifts.length} synchronized`,
         },
+        { text: `${openLaborAlerts.length} labor alerts open` },
       ]}
       tableProps={{
         columns,

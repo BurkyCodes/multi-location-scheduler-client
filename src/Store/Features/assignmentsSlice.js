@@ -45,7 +45,11 @@ export const createAssignment = createAsyncThunk(
         method: "POST",
         body: JSON.stringify(payload),
       });
-      return response?.data;
+      return {
+        data: response?.data || null,
+        warnings: response?.warnings || [],
+        labor_alerts: response?.labor_alerts || [],
+      };
     } catch (error) {
       return rejectWithValue(getAssignmentErrorPayload(error, "Failed to create assignment"));
     }
@@ -60,7 +64,11 @@ export const updateAssignment = createAsyncThunk(
         method: "PATCH",
         body: JSON.stringify(payload),
       });
-      return response?.data;
+      return {
+        data: response?.data || null,
+        warnings: response?.warnings || [],
+        labor_alerts: response?.labor_alerts || [],
+      };
     } catch (error) {
       return rejectWithValue(getAssignmentErrorPayload(error, "Failed to update assignment"));
     }
@@ -218,7 +226,7 @@ const assignmentsSlice = createSlice({
       })
       .addCase(createAssignment.fulfilled, (state, action) => {
         state.saving = false;
-        if (action.payload) state.list.unshift(action.payload);
+        if (action.payload?.data) state.list.unshift(action.payload.data);
       })
       .addCase(createAssignment.rejected, (state, action) => {
         state.saving = false;
@@ -230,7 +238,8 @@ const assignmentsSlice = createSlice({
       })
       .addCase(updateAssignment.fulfilled, (state, action) => {
         state.saving = false;
-        const updated = action.payload;
+        const updated = action.payload?.data;
+        if (!updated) return;
         const updatedId = getId(updated);
         state.list = state.list.map((item) => (getId(item) === updatedId ? updated : item));
         if (state.selected && getId(state.selected) === updatedId) {

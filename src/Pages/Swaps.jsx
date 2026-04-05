@@ -314,6 +314,10 @@ const Swaps = () => {
       toast.error("Could not request swap. Assignment details are incomplete.");
       return;
     }
+    if (pendingSwapRequests.length >= 3) {
+      toast.error("You can only have up to 3 pending swap/drop requests at a time.");
+      return;
+    }
     if (myPendingSwapAssignmentIds.has(String(assignment.id))) {
       toast.error("Swap already requested for this shift.");
       return;
@@ -357,23 +361,49 @@ const Swaps = () => {
       return;
     }
     setAcceptingSwapId(requestId);
-    const result = await dispatch(
-      acceptSwapRequest({
-        id: requestId,
-        accepted_by_user_id: userId,
-      }),
+    const isDropRequest = String(request?.type || "").toLowerCase() === "drop";
+    const fromAssignmentId = String(
+      getId(request?.from_assignment_id) || request?.from_assignment_id || "",
     );
+
+    const result = isDropRequest
+      ? await dispatch(
+          createSwapRequest({
+            type: "pickup",
+            requester_id: userId,
+            from_assignment_id: fromAssignmentId,
+            note: "Direct pickup requested from swap board",
+          }),
+        )
+      : await dispatch(
+          acceptSwapRequest({
+            id: requestId,
+            accepted_by_user_id: userId,
+          }),
+        );
     setAcceptingSwapId("");
 
-    if (acceptSwapRequest.fulfilled.match(result)) {
+    if (
+      acceptSwapRequest.fulfilled.match(result) ||
+      createSwapRequest.fulfilled.match(result)
+    ) {
       await logSwapAudit("swap_request_accepted", {
         swap_request_id: requestId,
         accepted_by_user_id: userId,
       });
-      toast.success("Swap request accepted. Waiting for manager/admin approval.");
+      toast.success(
+        isDropRequest
+          ? "Pickup request submitted. Waiting for manager/admin approval."
+          : "Swap request accepted. Waiting for manager/admin approval.",
+      );
       dispatch(fetchSwapRequests());
     } else {
-      toast.error(toErrorMessage(result?.payload, "Failed to accept swap request"));
+      toast.error(
+        toErrorMessage(
+          result?.payload,
+          isDropRequest ? "Failed to create pickup request" : "Failed to accept swap request",
+        ),
+      );
     }
   };
 

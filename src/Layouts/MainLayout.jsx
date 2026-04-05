@@ -23,6 +23,8 @@ import { logoutUser } from "../Store/Features/authSlice";
 import { hasRole } from "../Utils/roles";
 import NotificationsBootstrap from "./NotificationsBootstrap";
 
+const REALTIME_STATUS_EVENT = "realtime-connection-status";
+
 const { Sider, Content, Header } = Layout;
 const PALETTE = {
   black: "#0B0B0B",
@@ -41,6 +43,7 @@ const MainLayout = () => {
     typeof window !== "undefined" ? window.innerWidth < MOBILE_BREAKPOINT : false,
   );
   const [collapsed, setCollapsed] = useState(false);
+  const [realtimeStatus, setRealtimeStatus] = useState("connecting");
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const location = useLocation();
@@ -66,6 +69,28 @@ const MainLayout = () => {
   const userInitial = (user?.name || user?.email || "U").charAt(0).toUpperCase();
 
   const isManager = hasRole(user, ["manager"]);
+  const showRealtimeBadge = isManager || isAdmin;
+
+  const realtimeBadgeMeta = {
+    connected: { label: "Live", dot: "#16a34a", bg: "#ecfdf3", border: "#bbf7d0", text: "#166534" },
+    reconnecting: {
+      label: "Reconnecting",
+      dot: "#d97706",
+      bg: "#fff7ed",
+      border: "#fed7aa",
+      text: "#9a3412",
+    },
+    offline: { label: "Offline", dot: "#dc2626", bg: "#fef2f2", border: "#fecaca", text: "#991b1b" },
+    connecting: {
+      label: "Connecting",
+      dot: "#2563eb",
+      bg: "#eff6ff",
+      border: "#bfdbfe",
+      text: "#1d4ed8",
+    },
+  };
+
+  const realtimeUi = realtimeBadgeMeta[realtimeStatus] || realtimeBadgeMeta.connecting;
 
   const allMenuItems = [
     { key: "/", icon: <LayoutDashboard size={20} />, label: "Dashboard" },
@@ -113,6 +138,16 @@ const MainLayout = () => {
   useEffect(() => {
     setCollapsed(isMobile);
   }, [isMobile]);
+
+  useEffect(() => {
+    const onRealtimeStatus = (event) => {
+      const next = event?.detail?.status;
+      if (!next) return;
+      setRealtimeStatus(next);
+    };
+    window.addEventListener(REALTIME_STATUS_EVENT, onRealtimeStatus);
+    return () => window.removeEventListener(REALTIME_STATUS_EVENT, onRealtimeStatus);
+  }, []);
 
   const toggleSidebar = () => setCollapsed((prev) => !prev);
   const onMenuNavigate = (key) => {
@@ -215,6 +250,30 @@ const MainLayout = () => {
           />
 
           <div className="flex flex-row  items-center gap-3">
+            {showRealtimeBadge ? (
+              <div
+                className="hidden md:flex items-center gap-2 rounded-full px-3 py-1"
+                style={{
+                  border: `1px solid ${realtimeUi.border}`,
+                  backgroundColor: realtimeUi.bg,
+                }}
+              >
+                <span
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: 999,
+                    backgroundColor: realtimeUi.dot,
+                  }}
+                />
+                <span
+                  className="text-[11px] font-bold uppercase tracking-wide"
+                  style={{ color: realtimeUi.text, fontFamily: "'Montserrat', sans-serif" }}
+                >
+                  {realtimeUi.label}
+                </span>
+              </div>
+            ) : null}
             <Badge count={inAppEnabled ? unreadCount : 0} size="small" offset={[-2, 4]}>
               <Button
                 type="text"

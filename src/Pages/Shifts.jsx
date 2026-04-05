@@ -785,6 +785,10 @@ const Shifts = () => {
       toast.error("Could not request swap. Assignment details are incomplete.");
       return;
     }
+    if (pendingSwapCount >= 3) {
+      toast.error("You can only have up to 3 pending swap/drop requests at a time.");
+      return;
+    }
     if (pendingSwapAssignmentIds.has(String(assignment.id))) {
       toast.error("Swap already requested for this shift.");
       return;
