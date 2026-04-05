@@ -16,7 +16,19 @@ import Certifications from "../Pages/Certifications";
 import StaffPreferences from "../Pages/StaffPreferences";
 import EmployeeHours from "../Pages/EmployeeHours";
 import { fetchProfile, verifyAuth } from "../Store/Features/authSlice";
-import { hasRole } from "../utils/roles";
+
+const getRoleLabel = (user) =>
+  String(
+    user?.role_id?.role ||
+      user?.role ||
+      (Array.isArray(user?.status) && user.status.length ? user.status[0] : "") ||
+      "",
+  ).toLowerCase();
+
+const hasRole = (user, roles = []) => {
+  const roleLabel = getRoleLabel(user);
+  return roles.some((role) => roleLabel.includes(String(role).toLowerCase()));
+};
 
 const RouteHydrationFallback = () => (
   <div className="min-h-[40vh] w-full flex items-center justify-center">
