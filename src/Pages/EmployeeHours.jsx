@@ -34,6 +34,9 @@ const EmployeeHours = () => {
         key: String(item.user_id),
         employee: item.name,
         workedHours: item.total_worked_hours ?? 0,
+        desiredHours: item.desired_hours_per_week ?? 40,
+        overboard: Boolean(item.is_overboard_employee),
+        qualifiedForRaise: Boolean(item.qualified_for_raise),
         buckets: item.buckets || [],
       })),
     [list]
@@ -50,6 +53,25 @@ const EmployeeHours = () => {
       dataIndex: "workedHours",
       key: "workedHours",
       render: (value) => <strong>{Number(value || 0).toFixed(2)}h</strong>,
+    },
+    {
+      title: "Desired Hours",
+      dataIndex: "desiredHours",
+      key: "desiredHours",
+      render: (value) => `${Number(value || 0).toFixed(2)}h`,
+    },
+    {
+      title: "Status",
+      key: "status",
+      render: (_, row) =>
+        row.overboard ? (
+          <div className="flex flex-wrap gap-1">
+            <Tag color="volcano">Overboard Employee</Tag>
+            {row.qualifiedForRaise ? <Tag color="green">Qualified for Raise</Tag> : null}
+          </div>
+        ) : (
+          <Tag color="blue">Within Desired Hours</Tag>
+        ),
     },
     {
       title: period === "month" ? "Monthly Buckets" : "Weekly Buckets",

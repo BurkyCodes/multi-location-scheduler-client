@@ -10,7 +10,7 @@ import ColumnData from "../SharedComponents/ColumnComponents/ColumnData";
 import StatusBadge from "../SharedComponents/ColumnComponents/StatusBadge";
 import {
   createCertification,
-  deleteCertification,
+  decertifyCertification,
   fetchCertifications,
   updateCertification,
 } from "../Store/Features/certificationsSlice";
@@ -216,12 +216,30 @@ const Certifications = () => {
               }}
             />
             <Button
-              danger
               type="text"
-              className="h-8 w-8 rounded-lg bg-rose-50 text-rose-600"
+              className={`h-8 rounded-lg px-2 ${
+                row.status === "active"
+                  ? "bg-rose-50 text-rose-600"
+                  : "bg-emerald-50 text-emerald-700"
+              }`}
               icon={<Trash2 size={13} />}
-              onClick={() => setDeleteTarget({ type: CERT_TAB, row })}
-            />
+              onClick={() => {
+                if (row.status === "active") {
+                  setDeleteTarget({ type: CERT_TAB, row });
+                  return;
+                }
+                setEditingCertification(row);
+                setFormValues({
+                  user_id: String(getId(row?.raw?.user_id) || ""),
+                  location_id: String(getId(row?.raw?.location_id) || ""),
+                  is_active: "true",
+                });
+                setFormErrors({});
+                setEditOpen(true);
+              }}
+            >
+              {row.status === "active" ? "Decertify" : "Recertify"}
+            </Button>
           </div>
         ),
       });
@@ -425,11 +443,19 @@ const Certifications = () => {
     if (!deleteTarget) return;
 
     if (deleteTarget.type === CERT_TAB) {
-      const result = await dispatch(deleteCertification(deleteTarget.row.key));
-      if (deleteCertification.fulfilled.match(result)) {
-        toast.success("Certification deleted");
+      const reason = window.prompt(
+        "Reason for decertifying this staff member from location:",
+        "No longer certified for this location",
+      );
+      if (!reason) return;
+      const result = await dispatch(
+        decertifyCertification({ id: deleteTarget.row.key, reason }),
+      );
+      if (decertifyCertification.fulfilled.match(result)) {
+        toast.success("Staff decertified");
+        dispatch(fetchCertifications());
       } else {
-        toast.error(result?.payload || "Failed to delete certification");
+        toast.error(result?.payload || "Failed to decertify certification");
         return;
       }
     }
@@ -636,10 +662,10 @@ const Certifications = () => {
               visible: Boolean(deleteTarget),
               onCancel: () => setDeleteTarget(null),
               onConfirm: handleDeleteConfirm,
-              title: deleteTarget.type === CERT_TAB ? "Delete Certification" : "Remove Staff Skill",
+              title: deleteTarget.type === CERT_TAB ? "Decertify Staff" : "Remove Staff Skill",
               subtitle:
                 deleteTarget.type === CERT_TAB
-                  ? `Delete ${deleteTarget.row.staffName} certification at ${deleteTarget.row.locationName}?`
+                  ? `Decertify ${deleteTarget.row.staffName} from ${deleteTarget.row.locationName}? Historical data remains intact.`
                   : `Remove ${deleteTarget.row.skillName} from ${deleteTarget.row.staffName}?`,
             }
           : null

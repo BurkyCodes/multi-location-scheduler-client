@@ -19,6 +19,7 @@ import {
   clockInAssignmentQuick,
   clockOutAssignmentQuick,
   fetchAssignments,
+  fetchOnDutyNow,
   fetchMyShiftTracking,
   pauseAssignmentQuick,
   resumeAssignmentQuick,
@@ -96,6 +97,8 @@ const Dashboard = () => {
   const { list: assignments, loading: assignmentsLoading } = useSelector(
     (state) => state.assignments,
   );
+  const onDutyNow = useSelector((state) => state.assignments.onDutyNow);
+  const onDutyNowLoading = useSelector((state) => state.assignments.onDutyNowLoading);
   const myTracking = useSelector((state) => state.assignments.myTracking);
   const myTrackingLoading = useSelector((state) => state.assignments.myTrackingLoading);
   const quickActionLoading = useSelector((state) => state.assignments.quickActionLoading);
@@ -120,6 +123,7 @@ const Dashboard = () => {
       dispatch(fetchStaff());
       dispatch(fetchAuditLogs({ limit: 10 }));
       dispatch(fetchLaborAlerts());
+      dispatch(fetchOnDutyNow());
     }
     if (isStaffUser && currentUserId) dispatch(fetchAvailabilityByUser(currentUserId));
   }, [dispatch, isStaffUser, currentUserId]);
@@ -347,6 +351,33 @@ const Dashboard = () => {
       </div>
     </div>
   );
+
+  const onDutyContent = !isStaffUser ? (
+    <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
+      <div className="text-xs font-bold uppercase tracking-wide text-emerald-700">
+        On-Duty Now
+      </div>
+      <div className="mt-1 text-sm font-semibold text-emerald-800">
+        {Number(onDutyNow?.total_on_duty || 0)} currently clocked in
+      </div>
+      <div className="mt-2 space-y-2">
+        {(onDutyNow?.locations || []).slice(0, 4).map((entry) => (
+          <div key={entry?.location?.id || entry?.location?.name} className="rounded-lg bg-white p-2">
+            <div className="text-xs font-bold text-slate-800">
+              {entry?.location?.name || "Unknown Location"} ({entry?.on_duty_count || 0})
+            </div>
+            <div className="mt-1 text-xs text-slate-600">
+              {(entry?.staff || []).slice(0, 3).map((staffMember) => staffMember?.name).join(", ") ||
+                "No one clocked in"}
+            </div>
+          </div>
+        ))}
+        {onDutyNowLoading ? (
+          <div className="text-xs text-slate-500">Loading on-duty staff...</div>
+        ) : null}
+      </div>
+    </div>
+  ) : null;
 
   const availabilitySummary = useMemo(() => {
     const windows = userAvailability?.recurring_windows || [];
@@ -711,7 +742,16 @@ const Dashboard = () => {
           },
         }),
       }}
-      afterTableContent={laborComplianceContent}
+      afterTableContent={
+        !isStaffUser ? (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {laborComplianceContent}
+            {onDutyContent}
+          </div>
+        ) : (
+          laborComplianceContent
+        )
+      }
       secondaryModalOpen={viewOpen}
       onSecondaryModalClose={() => {
         setViewOpen(false);

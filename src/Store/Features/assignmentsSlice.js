@@ -15,6 +15,12 @@ const initialState = {
     active_assignment: null,
     assignments: [],
   },
+  onDutyNow: {
+    now_utc: null,
+    total_on_duty: 0,
+    locations: [],
+  },
+  onDutyNowLoading: false,
   myTrackingLoading: false,
   quickActionLoading: false,
   error: null,
@@ -111,6 +117,18 @@ export const fetchMyShiftTracking = createAsyncThunk(
       return response?.data || { now_utc: null, active_assignment: null, assignments: [] };
     } catch (error) {
       return rejectWithValue(getAssignmentErrorPayload(error, "Failed to fetch shift tracking"));
+    }
+  },
+);
+
+export const fetchOnDutyNow = createAsyncThunk(
+  "assignments/fetchOnDutyNow",
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await apiRequest("/assignments/on-duty-now");
+      return response || { now_utc: null, total_on_duty: 0, locations: [] };
+    } catch (error) {
+      return rejectWithValue(getAssignmentErrorPayload(error, "Failed to fetch on-duty staff"));
     }
   },
 );
@@ -293,6 +311,22 @@ const assignmentsSlice = createSlice({
       .addCase(fetchMyShiftTracking.rejected, (state, action) => {
         state.myTrackingLoading = false;
         state.myTracking = { now_utc: null, active_assignment: null, assignments: [] };
+        state.error = action.payload || state.error;
+      })
+      .addCase(fetchOnDutyNow.pending, (state) => {
+        state.onDutyNowLoading = true;
+      })
+      .addCase(fetchOnDutyNow.fulfilled, (state, action) => {
+        state.onDutyNowLoading = false;
+        state.onDutyNow = action.payload || {
+          now_utc: null,
+          total_on_duty: 0,
+          locations: [],
+        };
+      })
+      .addCase(fetchOnDutyNow.rejected, (state, action) => {
+        state.onDutyNowLoading = false;
+        state.onDutyNow = { now_utc: null, total_on_duty: 0, locations: [] };
         state.error = action.payload || state.error;
       })
       .addCase(clockInAssignmentQuick.pending, (state) => {

@@ -15,6 +15,7 @@ import { fetchSchedules } from "../Store/Features/schedulesSlice";
 import { fetchShifts } from "../Store/Features/shiftsSlice";
 import {
   fetchAssignments,
+  fetchOnDutyNow,
   fetchMyShiftTracking,
 } from "../Store/Features/assignmentsSlice";
 import { fetchSwapRequests } from "../Store/Features/swapRequestsSlice";
@@ -60,6 +61,8 @@ const NotificationsBootstrap = () => {
   const navigate = useNavigate();
   const user = useSelector((state) => state.auth.user);
   const userId = user?._id || user?.id;
+  const role = user?.role_id?.role || "";
+  const canViewOnDuty = role === "admin" || role === "manager";
   const notificationPrefs = useSelector((state) =>
     state.preferences.notificationsByUser[String(userId || "")]
   );
@@ -154,6 +157,7 @@ const NotificationsBootstrap = () => {
     const refreshAssignments = () => {
       dispatch(fetchAssignments());
       dispatch(fetchMyShiftTracking());
+      if (canViewOnDuty) dispatch(fetchOnDutyNow());
     };
     const refreshSwaps = () => dispatch(fetchSwapRequests());
 
@@ -196,7 +200,7 @@ const NotificationsBootstrap = () => {
       broadcastRealtimeStatus("offline");
       stream.close();
     };
-  }, [dispatch, inAppEnabled, userId]);
+  }, [canViewOnDuty, dispatch, inAppEnabled, userId]);
 
   useEffect(() => {
     let unsubscribe = () => {};
