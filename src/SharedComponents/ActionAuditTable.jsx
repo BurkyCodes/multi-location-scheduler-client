@@ -26,6 +26,12 @@ const getActionType = (item) =>
   item?.target_type ||
   "General";
 
+const getActorLabel = (item) => {
+  const actor = item?.performed_by || item?.actor_user_id || {};
+  if (typeof actor === "string") return actor;
+  return actor?.name || actor?.email || actor?.phone_number || "Unknown user";
+};
+
 const getActionLink = (item) => {
   const moduleValue = String(item?.module || item?.entity_type || "").toLowerCase();
   if (moduleValue.includes("shift") || moduleValue.includes("schedule")) return "/schedule";
@@ -63,6 +69,7 @@ const ActionAuditTable = ({ items }) => {
             items.map((item, index) => {
               const action = getActionLabel(item);
               const actionType = getActionType(item);
+              const actorLabel = getActorLabel(item);
               const isCreateAction = /create|add|publish/i.test(action);
 
               return (
@@ -76,9 +83,20 @@ const ActionAuditTable = ({ items }) => {
                       isCreateAction ? "bg-emerald-500" : "bg-amber-500 animate-pulse"
                     }`}
                   />
-                  <p className="flex-1 min-w-0 text-sm font-semibold truncate text-slate-800" title={action}>
-                    {action}
-                  </p>
+                  <div className="flex-1 min-w-0">
+                    <p
+                      className="text-sm font-semibold truncate text-slate-800"
+                      title={action}
+                    >
+                      {action}
+                    </p>
+                    <p
+                      className="text-xs text-slate-500 truncate"
+                      title={`Performed by ${actorLabel}`}
+                    >
+                      Performed by {actorLabel}
+                    </p>
+                  </div>
                   <span
                     className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-lg ${
                       isCreateAction
