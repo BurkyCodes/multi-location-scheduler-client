@@ -169,10 +169,11 @@ const ModuleLayoutsOne = ({
             style={{ backgroundColor: COLORS.white, borderColor: "#f1f5f9" }}
           >
             <div className="px-6 py-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col items-start gap-1 md:flex-row md:items-center md:gap-3">
                 <h3 className="text-sm font-semibold" style={{ ...FONT, color: COLORS.black }}>
                   {tableTitle || (isTrashView ? "Deleted" : "All Records")}
                 </h3>
+                <div>
                 {loading ? (
                   <Spin size="small" />
                 ) : tableHeaderBadges && tableHeaderBadges.length ? (
@@ -201,6 +202,7 @@ const ModuleLayoutsOne = ({
                     {(totalRecords || 0).toLocaleString()} total
                   </span>
                 )}
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 {shouldShowViewToggle ? (
