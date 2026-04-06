@@ -3,6 +3,9 @@ import { Modal, Button } from "antd";
 import { AlertTriangle } from "lucide-react";
 
 const toReadableRule = (rule) =>
+  ({
+    daily_12_block: "Block",
+  }[String(rule || "").toLowerCase()]) ||
   String(rule || "unknown_rule")
     .split("_")
     .filter(Boolean)

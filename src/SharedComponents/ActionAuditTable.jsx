@@ -41,6 +41,18 @@ const getActionLink = (item) => {
   return "/";
 };
 
+const getScheduleId = (item) =>
+  item?.schedule_id ||
+  item?.entity_id ||
+  item?.after_state?._id ||
+  item?.after_state?.id ||
+  item?.after_state?.schedule_id ||
+  item?.before_state?._id ||
+  item?.before_state?.id ||
+  item?.before_state?.schedule_id ||
+  item?.data?.schedule_id ||
+  "";
+
 const ActionAuditTable = ({ items }) => {
   const hasItems = Array.isArray(items) && items.length > 0;
 
@@ -71,11 +83,18 @@ const ActionAuditTable = ({ items }) => {
               const actionType = getActionType(item);
               const actorLabel = getActorLabel(item);
               const isCreateAction = /create|add|publish/i.test(action);
+              const actionLink = getActionLink(item);
+              const scheduleId = String(getScheduleId(item) || "");
+              const linkState =
+                actionLink === "/schedule" && scheduleId
+                  ? { scheduleId, openDrawer: true }
+                  : undefined;
 
               return (
                 <Link
                   key={item?._id || item?.id || `${action}-${index}`}
-                  to={getActionLink(item)}
+                  to={actionLink}
+                  state={linkState}
                   className="flex items-center gap-3 border border-slate-200 rounded-xl px-3 py-2.5 hover:bg-slate-50 hover:border-slate-300 transition-colors"
                 >
                   <span

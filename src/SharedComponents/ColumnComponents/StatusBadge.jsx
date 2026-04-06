@@ -23,6 +23,31 @@ const STATUS_META = {
     className: "bg-blue-50 text-blue-700 border-blue-200",
     label: "assigned",
   },
+  ongoing: {
+    icon: <CheckCircleOutlined className="text-[10px]" />,
+    className: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    label: "ongoing",
+  },
+  past: {
+    icon: <ClockCircleOutlined className="text-[10px]" />,
+    className: "bg-slate-100 text-slate-700 border-slate-200",
+    label: "shift past",
+  },
+  open: {
+    icon: <ClockCircleOutlined className="text-[10px]" />,
+    className: "bg-amber-50 text-amber-700 border-amber-200",
+    label: "open",
+  },
+  filled: {
+    icon: <CheckCircleOutlined className="text-[10px]" />,
+    className: "bg-blue-50 text-blue-700 border-blue-200",
+    label: "filled",
+  },
+  cancelled: {
+    icon: <WarningOutlined className="text-[10px]" />,
+    className: "bg-red-50 text-red-700 border-red-200",
+    label: "cancelled",
+  },
   rejected: {
     icon: <WarningOutlined className="text-[10px]" />,
     className: "bg-red-50 text-red-700 border-red-200",

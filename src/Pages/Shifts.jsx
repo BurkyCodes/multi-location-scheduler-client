@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Button } from "antd";
+import { Button, Select } from "antd";
 import { ClipboardCheck, Pencil, Plus, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -9,14 +9,19 @@ import ModuleLayoutsOne from "../Layouts/ModuleLayoutsOne";
 import { colTitle } from "../SharedComponents/ColumnComponents/ColumnTitle";
 import ColumnData from "../SharedComponents/ColumnComponents/ColumnData";
 import StatusBadge from "../SharedComponents/ColumnComponents/StatusBadge";
+import ConstraintViolationsModal from "../SharedComponents/Modals/ConstraintViolationsModal";
 import { createShift, deleteShift, fetchShifts, updateShift } from "../Store/Features/shiftsSlice";
 import { fetchLocations } from "../Store/Features/locationsSlice";
 import { fetchSchedules } from "../Store/Features/schedulesSlice";
 import { fetchSkills } from "../Store/Features/skillsSlice";
+import { fetchStaff } from "../Store/Features/staffSlice";
+import { fetchAvailabilityByUser } from "../Store/Features/availabilitySlice";
 import {
   clockInAssignmentQuick,
   clockOutAssignmentQuick,
+  createAssignment,
   fetchAssignments,
+  fetchCoverageRecommendations,
   fetchMyShiftTracking,
   pauseAssignmentQuick,
   resumeAssignmentQuick,
@@ -81,6 +86,10 @@ const getAssignmentId = (assignment) =>
       assignment?.assignment?.id ||
       "",
   );
+const isOngoingAssignment = (workStatus) => {
+  const normalized = String(workStatus || "").toLowerCase();
+  return normalized === "clocked_in" || normalized === "paused";
+};
 const parseDateTimeLocal = (value) => {
   const match = String(value || "").match(
     /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/,
@@ -191,6 +200,47 @@ const utcIsoToDateTimeLocalInTimezone = (value, timezoneCode) => {
   const h = String(parts.hour).padStart(2, "0");
   const min = String(parts.minute).padStart(2, "0");
   return `${y}-${m}-${d}T${h}:${min}`;
+};
+
+const formatDateTimeInTimezone = (value, timezoneCode, options = {}) => {
+  if (!value) return "N/A";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "N/A";
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: toIanaTimeZone(timezoneCode),
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    ...options,
+  }).format(date);
+};
+
+const formatShiftWindowInTimezone = (startsAt, endsAt, timezoneCode) => {
+  if (!startsAt || !endsAt) return "N/A";
+  const startDateOnly = formatDateTimeInTimezone(startsAt, timezoneCode, {
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
+  });
+  const endDateOnly = formatDateTimeInTimezone(endsAt, timezoneCode, {
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
+  });
+  const startLabel = formatDateTimeInTimezone(startsAt, timezoneCode);
+  if (startDateOnly === endDateOnly) {
+    const endTime = formatDateTimeInTimezone(endsAt, timezoneCode, {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    });
+    return `${startLabel} - ${endTime}`;
+  }
+  const endLabel = formatDateTimeInTimezone(endsAt, timezoneCode);
+  return `${startLabel} - ${endLabel}`;
 };
 
 const isSundayNightChaosPremium = (startsAtIso, timeZone) => {
@@ -392,17 +442,39 @@ const Shifts = () => {
 
   const { list, loading, saving } = useSelector((state) => state.shifts);
   const { list: assignments } = useSelector((state) => state.assignments);
-  const { myTracking, myTrackingLoading, quickActionLoading } = useSelector((state) => state.assignments);
+  const {
+    myTracking,
+    myTrackingLoading,
+    quickActionLoading,
+    saving: assignmentSaving,
+    recommendations,
+    recommendationsShiftId,
+    recommendationsLoading,
+  } = useSelector((state) => state.assignments);
   const { list: swapRequests, saving: swapSaving } = useSelector((state) => state.swapRequests);
   const { list: locations } = useSelector((state) => state.locations);
   const { list: schedules } = useSelector((state) => state.schedules);
   const { skills } = useSelector((state) => state.skills);
+  const { list: staff } = useSelector((state) => state.staff);
+  const availabilityByUser = useSelector((state) => state.availability.byUser);
 
   const [values, setValues] = useState(initialValues);
   const [errors, setErrors] = useState({});
   const [editOpen, setEditOpen] = useState(false);
   const [editingShift, setEditingShift] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [assignDrawerOpen, setAssignDrawerOpen] = useState(false);
+  const [selectedShiftId, setSelectedShiftId] = useState("");
+  const [selectedStaffId, setSelectedStaffId] = useState("");
+  const [seventhDayOverrideEnabled, setSeventhDayOverrideEnabled] = useState(false);
+  const [seventhDayOverrideReason, setSeventhDayOverrideReason] = useState("");
+  const [constraintModal, setConstraintModal] = useState({
+    open: false,
+    title: "Assignment constraint violation",
+    subtitle: "Review the failed rules below and adjust shift or staff selection.",
+    violations: [],
+    suggestions: [],
+  });
 
   useEffect(() => {
     dispatch(fetchShifts());
@@ -410,11 +482,14 @@ const Shifts = () => {
     dispatch(fetchLocations());
     dispatch(fetchSchedules());
     dispatch(fetchSkills());
+    if (isManager) {
+      dispatch(fetchStaff());
+    }
     if (isStaffUser) {
       dispatch(fetchMyShiftTracking());
       dispatch(fetchSwapRequests());
     }
-  }, [dispatch, isStaffUser]);
+  }, [dispatch, isManager, isStaffUser]);
 
   const managerLocationIds = useMemo(() => {
     const raw = currentUser?.location_ids || [];
@@ -483,6 +558,42 @@ const Shifts = () => {
       }, {}),
     [skills],
   );
+  const allowedShiftOptions = useMemo(() => {
+    const filtered = isManager
+      ? list.filter((shift) => managerLocationIds.includes(String(getId(shift?.location_id))))
+      : list;
+    return filtered.map((shift) => ({
+      label:
+        shift?.title ||
+        shift?.name ||
+        `${shift?.location_id?.name || "Location"} - ${dayjs(shift?.starts_at_utc).format("MMM D, YYYY h:mm A")}`,
+      value: String(getId(shift)),
+    }));
+  }, [isManager, list, managerLocationIds]);
+  const allowedStaffOptions = useMemo(() => {
+    const filtered = isManager
+      ? (staff || []).filter((member) => {
+          const staffLocationIds = (member?.location_ids || []).map((locationId) => String(getId(locationId)));
+          return staffLocationIds.some((id) => managerLocationIds.includes(id));
+        })
+      : staff || [];
+
+    const recommendationSet = new Set(
+      (recommendations || []).map((item) => String(getId(item?.user_id))).filter(Boolean),
+    );
+
+    return filtered
+      .map((member) => {
+        const value = String(getId(member));
+        const isRecommended = recommendationSet.has(value);
+        return {
+          value,
+          label: `${member?.name || member?.email || "Unnamed"}${isRecommended ? " (Recommended)" : ""}`,
+          isRecommended,
+        };
+      })
+      .sort((a, b) => Number(b.isRecommended) - Number(a.isRecommended));
+  }, [isManager, managerLocationIds, recommendations, staff]);
 
   const managerDefaultLocationId = isManager && allowedLocations.length ? String(getId(allowedLocations[0])) : "";
   const effectiveLocationId = values.location_id || managerDefaultLocationId;
@@ -522,36 +633,51 @@ const Shifts = () => {
       ? list.filter((shift) => managerLocationIds.includes(String(getId(shift?.location_id))))
       : list;
 
-    const assignedShiftIds = new Set(
-      (assignments || [])
-        .filter((assignment) => String(assignment?.status || "").toLowerCase() === "assigned")
-        .map((assignment) => String(getId(assignment?.shift_id)))
-        .filter(Boolean),
-    );
+    const assignmentMetaByShift = new Map();
+    (assignments || []).forEach((assignment) => {
+      const shiftId = String(getId(assignment?.shift_id));
+      if (!shiftId) return;
+      const current = assignmentMetaByShift.get(shiftId) || { hasAssigned: false, isOngoing: false };
+      if (String(assignment?.status || "").toLowerCase() === "assigned") current.hasAssigned = true;
+      if (isOngoingAssignment(assignment?.work_status)) current.isOngoing = true;
+      assignmentMetaByShift.set(shiftId, current);
+    });
 
     return filtered.map((shift) => {
       const location = shift?.location_id;
       const skill = shift?.required_skill_id;
       const schedule = shift?.schedule_id;
       const shiftId = String(getId(shift));
+      const shiftMeta = assignmentMetaByShift.get(shiftId) || { hasAssigned: false, isOngoing: false };
+      const past = isPastShift(shift?.ends_at_utc);
+      const scheduleDate = schedule?.week_start_date
+        ? dayjs(schedule.week_start_date).format("MMM D, YYYY")
+        : "N/A";
+      const derivedStatus = past
+        ? "past"
+        : shiftMeta.isOngoing
+        ? "ongoing"
+        : shiftMeta.hasAssigned
+        ? "assigned"
+        : shift?.status || "open";
 
       return {
         key: shiftId,
         raw: shift,
         location: location?.name || locationById[String(getId(location))]?.name || "Unknown Location",
-        schedule: schedule?._id || getId(schedule) || "N/A",
+        schedule: scheduleDate,
         skill: skill?.name || skill?.code || skillById[String(getId(skill))]?.name || "N/A",
-        timeframe:
-          shift?.starts_at_local && shift?.ends_at_local
-            ? `${shift.starts_at_local} - ${shift.ends_at_local}`
-            : `${dayjs(shift?.starts_at_utc).format("MMM D, YYYY h:mm A")} - ${dayjs(
-                shift?.ends_at_utc,
-              ).format("h:mm A")}`,
+        timeframe: formatShiftWindowInTimezone(
+          shift?.starts_at_utc,
+          shift?.ends_at_utc,
+          shift?.location_timezone || shift?.timezone || "EAT",
+        ),
         timezone: TZ_DISPLAY_LABEL[normalizeTimeZoneCode(shift?.location_timezone)] || "EAT",
         headcount_required: shift?.headcount_required ?? 1,
-        status: shift?.status || "open",
+        status: derivedStatus,
         premium: shift?.is_premium ? "Yes" : "No",
-        hasAssignment: assignedShiftIds.has(shiftId),
+        hasAssignment: shiftMeta.hasAssigned,
+        isPastShift: past,
       };
     });
   }, [isManager, list, locationById, managerLocationIds, skillById, assignments]);
@@ -561,34 +687,75 @@ const Shifts = () => {
     [myTracking?.active_assignment],
   );
 
-  const trackedAssignments = Array.isArray(myTracking?.assignments) ? myTracking.assignments : [];
-  const assignedShifts = trackedAssignments.map((assignment) => {
-    const shift = assignment?.shift_id || assignment?.shift || {};
-    const location = shift?.location_id || shift?.location || {};
-    const currentStatus = String(assignment?.status || "assigned").toLowerCase();
-    const assignmentId = getAssignmentId(assignment);
-    const isActive = assignmentId && activeAssignmentId && assignmentId === activeAssignmentId;
-    const status =
-      currentStatus === "paused"
-        ? "paused"
-        : currentStatus === "completed" || currentStatus === "clocked_out"
-        ? "completed"
-        : currentStatus === "in-progress" || currentStatus === "clocked_in" || isActive
-        ? "in-progress"
-        : "assigned";
+  const assignedShifts = useMemo(
+    () =>
+      (Array.isArray(myTracking?.assignments) ? myTracking.assignments : [])
+        .map((assignment) => {
+          const shift = assignment?.shift_id || assignment?.shift || {};
+          const location = shift?.location_id || shift?.location || {};
+          const currentStatus = String(assignment?.status || "assigned").toLowerCase();
+          const assignmentId = getAssignmentId(assignment);
+          const isActive = assignmentId && activeAssignmentId && assignmentId === activeAssignmentId;
+          const actionStatus =
+            currentStatus === "paused"
+              ? "paused"
+              : currentStatus === "completed" || currentStatus === "clocked_out"
+              ? "completed"
+              : currentStatus === "in-progress" || currentStatus === "clocked_in" || isActive
+              ? "in-progress"
+              : "assigned";
+          const start = shift?.starts_at_utc || assignment?.starts_at_utc;
+          const end = shift?.ends_at_utc || assignment?.ends_at_utc;
+          const past = isPastShift(end);
+          const status = past ? "past" : actionStatus === "in-progress" ? "ongoing" : actionStatus;
 
-    return {
-      id: getAssignmentId(assignment),
-      shiftId: String(getId(shift)),
-      title: shift?.title || shift?.name || "Assigned shift",
-      location: location?.name || "Unknown location",
-      start: shift?.starts_at_utc || assignment?.starts_at_utc,
-      end: shift?.ends_at_utc || assignment?.ends_at_utc,
-      timezone: shift?.location_timezone || shift?.timezone || "EAT",
-      status,
-      isPastShift: isPastShift(shift?.ends_at_utc || assignment?.ends_at_utc),
-    };
-  });
+          return {
+            id: assignmentId,
+            shiftId: String(getId(shift)),
+            title: shift?.title || shift?.name || "Assigned shift",
+            location: location?.name || "Unknown location",
+            start,
+            end,
+            timezone: shift?.location_timezone || shift?.timezone || "EAT",
+            status,
+            actionStatus,
+            isPastShift: past,
+          };
+        })
+        .sort((a, b) => {
+          const pastRank = Number(a.isPastShift) - Number(b.isPastShift);
+          if (pastRank !== 0) return pastRank;
+          return new Date(b.start || 0).getTime() - new Date(a.start || 0).getTime();
+        }),
+    [myTracking, activeAssignmentId],
+  );
+  useEffect(() => {
+    if (!isManager || !selectedShiftId) return;
+    dispatch(fetchCoverageRecommendations({ shiftId: selectedShiftId, limit: 8 }));
+  }, [dispatch, isManager, selectedShiftId]);
+  useEffect(() => {
+    if (!isManager || !selectedStaffId) return;
+    dispatch(fetchAvailabilityByUser(selectedStaffId));
+  }, [dispatch, isManager, selectedStaffId]);
+  const selectedAssignShift = useMemo(
+    () => (list || []).find((item) => String(getId(item)) === String(selectedShiftId || "")) || null,
+    [list, selectedShiftId],
+  );
+  const selectedAssignShiftTimezoneCode = useMemo(
+    () => normalizeTimeZoneCode(selectedAssignShift?.location_timezone || selectedAssignShift?.timezone),
+    [selectedAssignShift],
+  );
+  const selectedAssignStaffAvailability = availabilityByUser[String(selectedStaffId || "")];
+  const selectedAssignStaffAvailabilityTimezoneCode = useMemo(() => {
+    const recurringTz = selectedAssignStaffAvailability?.recurring_windows?.[0]?.timezone;
+    const exceptionTz = selectedAssignStaffAvailability?.exceptions?.[0]?.timezone;
+    const raw = recurringTz || exceptionTz || "";
+    return raw ? normalizeTimeZoneCode(raw) : "";
+  }, [selectedAssignStaffAvailability]);
+  const assignTimezoneMatch = useMemo(() => {
+    if (!selectedAssignShiftTimezoneCode || !selectedAssignStaffAvailabilityTimezoneCode) return null;
+    return selectedAssignShiftTimezoneCode === selectedAssignStaffAvailabilityTimezoneCode;
+  }, [selectedAssignShiftTimezoneCode, selectedAssignStaffAvailabilityTimezoneCode]);
 
   const pendingSwapCount = useMemo(
     () =>
@@ -752,6 +919,89 @@ const Shifts = () => {
       toast.error(toErrorMessage(result?.payload, "Failed to delete shift"));
     }
   };
+  const resetAssignForm = () => {
+    setSelectedShiftId("");
+    setSelectedStaffId("");
+    setSeventhDayOverrideEnabled(false);
+    setSeventhDayOverrideReason("");
+  };
+  const openAssignDrawer = (shiftId = "") => {
+    resetAssignForm();
+    setSelectedShiftId(shiftId ? String(shiftId) : "");
+    setAssignDrawerOpen(true);
+  };
+  const saveAssignmentFromShifts = async () => {
+    if (!selectedShiftId || !selectedStaffId) {
+      toast.error("Select both shift and staff member");
+      return;
+    }
+    if (seventhDayOverrideEnabled && !String(seventhDayOverrideReason || "").trim()) {
+      toast.error("Override reason is required when 7th day override is enabled");
+      return;
+    }
+
+    const payload = {
+      shift_id: selectedShiftId,
+      user_id: selectedStaffId,
+      status: "assigned",
+      ...(currentUser?._id ? { assigned_by: currentUser._id } : {}),
+      ...(seventhDayOverrideEnabled
+        ? {
+            manager_override: {
+              is_override: true,
+              override_type: "seventh_consecutive_day",
+              reason: seventhDayOverrideReason,
+              approved_by: currentUser?._id,
+              approved_at: new Date().toISOString(),
+            },
+          }
+        : {}),
+    };
+
+    const result = await dispatch(createAssignment(payload));
+    if (createAssignment.fulfilled.match(result)) {
+      toast.success("Assignment created");
+      setAssignDrawerOpen(false);
+      resetAssignForm();
+      dispatch(fetchAssignments());
+      navigate("/assignments");
+      return;
+    }
+
+    const payloadError = result?.payload;
+    const violations = Array.isArray(payloadError?.violations) ? payloadError.violations : [];
+    const warnings = Array.isArray(payloadError?.warnings) ? payloadError.warnings : [];
+    const requiresSeventhDayOverride = violations.some(
+      (item) => item?.rule === "seventh_day_override_required",
+    );
+    if (requiresSeventhDayOverride) {
+      setSeventhDayOverrideEnabled(true);
+      toast.error("This assignment hits a 7th consecutive day. Enter an override reason to continue.");
+    }
+    if (violations.length > 0) {
+      const suggestions = Array.isArray(payloadError?.suggestions) ? payloadError.suggestions : [];
+      const recommendations = Array.isArray(payloadError?.recommendations)
+        ? payloadError.recommendations
+        : suggestions;
+      const title = toErrorMessage(payloadError, "Assignment constraint violation");
+      setConstraintModal({
+        open: true,
+        title,
+        subtitle: "Review the failed rules below and adjust shift or staff selection.",
+        violations,
+        suggestions: recommendations,
+      });
+    } else {
+      const message = toErrorMessage(payloadError, "Failed to save assignment");
+      toast.error(message);
+    }
+
+    warnings.slice(0, 2).forEach((warning) => {
+      if (warning?.message) {
+        toast.warning(warning.message);
+      }
+    });
+  };
 
   const runQuickAction = async (action, assignmentId) => {
     if (!assignmentId) {
@@ -879,13 +1129,13 @@ const Shifts = () => {
                       <div className="rounded-xl bg-slate-50 p-3">
                         <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Starts</p>
                         <p className="text-sm font-semibold text-slate-900">
-                          {dayjs(shift.start).format("MMM D, YYYY h:mm A")}
+                          {formatDateTimeInTimezone(shift.start, shift.timezone)}
                         </p>
                       </div>
                       <div className="rounded-xl bg-slate-50 p-3">
                         <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Ends</p>
                         <p className="text-sm font-semibold text-slate-900">
-                          {dayjs(shift.end).format("MMM D, YYYY h:mm A")}
+                          {formatDateTimeInTimezone(shift.end, shift.timezone)}
                         </p>
                       </div>
                     </div>
@@ -898,12 +1148,12 @@ const Shifts = () => {
                           </span>
                         ) : (
                           <>
-                            {shift.status === "assigned" ? (
+                            {shift.actionStatus === "assigned" ? (
                               <Button size="small" type="primary" loading={quickActionLoading} onClick={() => runQuickAction("clock_in", shift.id)}>
                                 Clock In
                               </Button>
                             ) : null}
-                            {shift.status === "in-progress" ? (
+                            {shift.actionStatus === "in-progress" ? (
                               <>
                                 <Button size="small" loading={quickActionLoading} onClick={() => runQuickAction("pause", shift.id)}>
                                   Pause
@@ -913,7 +1163,7 @@ const Shifts = () => {
                                 </Button>
                               </>
                             ) : null}
-                            {shift.status === "paused" ? (
+                            {shift.actionStatus === "paused" ? (
                               <>
                                 <Button size="small" type="primary" loading={quickActionLoading} onClick={() => runQuickAction("resume", shift.id)}>
                                   Resume
@@ -958,8 +1208,19 @@ const Shifts = () => {
                           "Shift"}
                       </p>
                       <p className="text-xs text-slate-600 mt-1">
-                        {dayjs(request?.from_assignment_id?.shift_id?.starts_at_utc).format("MMM D, YYYY h:mm A")} -{" "}
-                        {dayjs(request?.from_assignment_id?.shift_id?.ends_at_utc).format("MMM D, YYYY h:mm A")}
+                        {formatDateTimeInTimezone(
+                          request?.from_assignment_id?.shift_id?.starts_at_utc,
+                          request?.from_assignment_id?.shift_id?.location_timezone ||
+                            request?.from_assignment_id?.shift_id?.timezone ||
+                            "EAT",
+                        )}{" "}
+                        -{" "}
+                        {formatDateTimeInTimezone(
+                          request?.from_assignment_id?.shift_id?.ends_at_utc,
+                          request?.from_assignment_id?.shift_id?.location_timezone ||
+                            request?.from_assignment_id?.shift_id?.timezone ||
+                            "EAT",
+                        )}
                       </p>
                     </div>
                   ))}
@@ -977,7 +1238,7 @@ const Shifts = () => {
       title: colTitle("Location"),
       dataIndex: "location",
       key: "location",
-      render: (value, row) => <ColumnData text={value} description={`Schedule: ${row.schedule}`} />,
+      render: (value, row) => <ColumnData text={value} description={`Week starts: ${row.schedule}`} />,
     },
     {
       title: colTitle("Skill"),
@@ -1008,6 +1269,15 @@ const Shifts = () => {
       key: "action",
       render: (_, row) => (
         <div className="flex items-center gap-2">
+          {isManager && !row.hasAssignment && !row.isPastShift ? (
+            <Button
+              type="default"
+              className="h-8 rounded-lg border-slate-200 text-slate-700"
+              onClick={() => openAssignDrawer(row.key)}
+            >
+              Assign
+            </Button>
+          ) : null}
           {!row.hasAssignment ? (
             <Button type="text" className="h-8 w-8 rounded-lg bg-blue-50 text-blue-600" icon={<Pencil size={13} />} onClick={() => openEditModal(row)} />
           ) : null}
@@ -1018,13 +1288,14 @@ const Shifts = () => {
   ];
 
   return (
+    <>
     <ModuleLayoutsOne
       title="Shifts"
       subtitle="Create and manage location shifts for assignment."
       headerAction={({ openModal }) => (
         <div className="flex items-center gap-2">
           {isManager ? (
-            <Button icon={<ClipboardCheck size={14} />} className="h-10 rounded-xl font-bold" onClick={() => navigate("/assignments")}>
+            <Button icon={<ClipboardCheck size={14} />} className="h-10 rounded-xl font-bold" onClick={() => openAssignDrawer()}>
               Assign Staff
             </Button>
           ) : null}
@@ -1107,7 +1378,118 @@ const Shifts = () => {
         title: "Delete Shift",
         subtitle: `Delete shift at ${deleteTarget?.location || "this location"}? This action cannot be undone.`,
       }}
+      secondaryModalOpen={assignDrawerOpen}
+      onSecondaryModalClose={() => {
+        setAssignDrawerOpen(false);
+        resetAssignForm();
+      }}
+      secondaryModalTitle="Assign Staff to Shift"
+      secondaryModalSubtitle="Assign from Shifts page, then continue in Assignments."
+      secondaryModalContent={
+        <div className="h-full flex flex-col p-6 gap-4">
+          <div>
+            <label className="text-xs font-bold uppercase tracking-wide text-slate-600">Shift</label>
+            <Select
+              className="mt-1 w-full"
+              value={selectedShiftId || undefined}
+              onChange={setSelectedShiftId}
+              placeholder="Select shift"
+              options={allowedShiftOptions}
+            />
+          </div>
+          <div>
+            <label className="text-xs font-bold uppercase tracking-wide text-slate-600">Staff Member</label>
+            <Select
+              className="mt-1 w-full"
+              value={selectedStaffId || undefined}
+              onChange={setSelectedStaffId}
+              placeholder="Select staff member"
+              options={allowedStaffOptions}
+            />
+            {selectedShiftId ? (
+              <p className="mt-2 text-[11px] text-slate-500">
+                {recommendationsLoading
+                  ? "Checking available staff for this shift..."
+                  : recommendationsShiftId === selectedShiftId
+                    ? `${recommendations.length} staff recommendation(s) based on shift fit and availability.`
+                    : "Select a shift to load availability-based recommendations."}
+              </p>
+            ) : null}
+            {selectedShiftId && selectedStaffId ? (
+              <p className="mt-2 text-[11px]">
+                <span className="font-bold text-slate-700">Timezone Match:</span>{" "}
+                {assignTimezoneMatch === null ? (
+                  <span className="text-slate-500">Checking staff availability timezone...</span>
+                ) : assignTimezoneMatch ? (
+                  <span className="text-emerald-700 font-semibold">
+                    Yes ({selectedAssignShiftTimezoneCode})
+                  </span>
+                ) : (
+                  <span className="text-amber-700 font-semibold">
+                    No (Shift: {selectedAssignShiftTimezoneCode} | Availability: {selectedAssignStaffAvailabilityTimezoneCode})
+                  </span>
+                )}
+              </p>
+            ) : null}
+          </div>
+          {selectedShiftId && selectedStaffId ? (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+              <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-amber-800">
+                <input
+                  type="checkbox"
+                  checked={seventhDayOverrideEnabled}
+                  onChange={(event) => setSeventhDayOverrideEnabled(event.target.checked)}
+                />
+                7th Day Override
+              </label>
+              <p className="mt-1 text-[11px] text-amber-700">
+                Enable only when this staff member is being assigned on a 7th consecutive workday.
+              </p>
+              {seventhDayOverrideEnabled ? (
+                <textarea
+                  className="mt-2 w-full rounded-lg border border-amber-300 bg-white p-2 text-xs text-slate-700"
+                  rows={3}
+                  value={seventhDayOverrideReason}
+                  onChange={(event) => setSeventhDayOverrideReason(event.target.value)}
+                  placeholder="Enter manager reason for this override..."
+                />
+              ) : null}
+            </div>
+          ) : null}
+          <div className="mt-auto flex items-center justify-between">
+            <Button
+              htmlType="button"
+              onClick={() => {
+                setAssignDrawerOpen(false);
+                resetAssignForm();
+              }}
+            >
+              Cancel
+            </Button>
+            <Button type="primary" loading={assignmentSaving} onClick={saveAssignmentFromShifts}>
+              Create Assignment
+            </Button>
+          </div>
+        </div>
+      }
     />
+    <ConstraintViolationsModal
+      visible={constraintModal.open}
+      title={constraintModal.title}
+      subtitle={constraintModal.subtitle}
+      violations={constraintModal.violations}
+      suggestions={constraintModal.suggestions}
+      onClose={() =>
+        setConstraintModal({
+          open: false,
+          title: "Assignment constraint violation",
+          subtitle: "Review the failed rules below and adjust shift or staff selection.",
+          violations: [],
+          suggestions: [],
+        })
+      }
+    />
+    </>
   );
 };
 

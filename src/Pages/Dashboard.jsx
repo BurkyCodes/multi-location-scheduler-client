@@ -35,11 +35,37 @@ import StatCard from "../SharedComponents/StatCard";
 import ActionAuditTable from "../SharedComponents/ActionAuditTable";
 import { hasRole } from "../Utils/roles";
 
-const formatDateTime = (value) => {
+const TZ_CODE_TO_IANA = {
+  EAT: "Africa/Nairobi",
+  PST: "America/Los_Angeles",
+};
+const normalizeTimeZoneCode = (timeZone) => {
+  const normalized = String(timeZone || "").trim().toUpperCase();
+  if (
+    normalized === "PST" ||
+    normalized === "PDT" ||
+    normalized === "PT" ||
+    normalized === "AMERICA/LOS_ANGELES"
+  ) {
+    return "PST";
+  }
+  return "EAT";
+};
+const toIanaTimeZone = (timeZone) => TZ_CODE_TO_IANA[normalizeTimeZoneCode(timeZone)] || TZ_CODE_TO_IANA.EAT;
+
+const formatDateTime = (value, timezoneCode) => {
   if (!value) return "N/A";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "N/A";
-  return date.toLocaleString();
+  return new Intl.DateTimeFormat("en-US", {
+    ...(timezoneCode ? { timeZone: toIanaTimeZone(timezoneCode) } : {}),
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).format(date);
 };
 const isPastShift = (endAt) => {
   if (!endAt) return false;
@@ -150,8 +176,11 @@ const Dashboard = () => {
           },
           staff: user.name || user.email || "Unassigned",
           time: {
-            range: `${formatDateTime(shift.starts_at_utc)} - ${formatDateTime(shift.ends_at_utc)}`,
-            timezone: shift.location_timezone || "N/A",
+            range: `${formatDateTime(shift.starts_at_utc, shift.location_timezone)} - ${formatDateTime(
+              shift.ends_at_utc,
+              shift.location_timezone,
+            )}`,
+            timezone: shift.location_timezone || shift.timezone || "N/A",
           },
           status: getShiftStatus({
             status: shift.status,
@@ -176,8 +205,11 @@ const Dashboard = () => {
         },
         staff: assignedUser?.name || "Open Shift",
         time: {
-          range: `${formatDateTime(shift.starts_at_utc)} - ${formatDateTime(shift.ends_at_utc)}`,
-          timezone: shift.location_timezone || "N/A",
+          range: `${formatDateTime(shift.starts_at_utc, shift.location_timezone)} - ${formatDateTime(
+            shift.ends_at_utc,
+            shift.location_timezone,
+          )}`,
+          timezone: shift.location_timezone || shift.timezone || "N/A",
         },
         status: getShiftStatus({ status: shift.status }),
       };
@@ -391,23 +423,33 @@ const Dashboard = () => {
   const activeShift = activeAssignment?.shift || null;
   const activeAssignmentId = getAssignmentId(activeAssignment);
 
-  const trackedAssignments = Array.isArray(myTracking?.assignments) ? myTracking.assignments : [];
-  const assignedShiftCards = trackedAssignments.map((assignment) => {
-    const shift = assignment?.shift_id || assignment?.shift || {};
-    const location = shift?.location_id || shift?.location || {};
-    const status = getActionableStatus(assignment, activeAssignmentId);
-    return {
-      id: getAssignmentId(assignment),
-      shiftId: String(getId(shift)),
-      title: shift?.title || shift?.name || "Assigned shift",
-      location: location?.name || "Unknown location",
-      start: shift?.starts_at_utc || assignment?.starts_at_utc,
-      end: shift?.ends_at_utc || assignment?.ends_at_utc,
-      timezone: shift?.location_timezone || shift?.timezone || "EAT",
-      status,
-      isPastShift: isPastShift(shift?.ends_at_utc || assignment?.ends_at_utc),
-    };
-  });
+  const assignedShiftCards = useMemo(
+    () =>
+      (Array.isArray(myTracking?.assignments) ? myTracking.assignments : [])
+        .map((assignment) => {
+          const shift = assignment?.shift_id || assignment?.shift || {};
+          const location = shift?.location_id || shift?.location || {};
+          const start = shift?.starts_at_utc || assignment?.starts_at_utc;
+          const end = shift?.ends_at_utc || assignment?.ends_at_utc;
+          return {
+            id: getAssignmentId(assignment),
+            shiftId: String(getId(shift)),
+            title: shift?.title || shift?.name || "Assigned shift",
+            location: location?.name || "Unknown location",
+            start,
+            end,
+            timezone: shift?.location_timezone || shift?.timezone || "EAT",
+            status: getActionableStatus(assignment, activeAssignmentId),
+            isPastShift: isPastShift(end),
+          };
+        })
+        .sort((a, b) => {
+          const pastRank = Number(a.isPastShift) - Number(b.isPastShift);
+          if (pastRank !== 0) return pastRank;
+          return new Date(b.start || 0).getTime() - new Date(a.start || 0).getTime();
+        }),
+    [myTracking, activeAssignmentId],
+  );
 
   const myPendingSwapCount = useMemo(
     () =>
@@ -544,7 +586,11 @@ const Dashboard = () => {
                   {activeShift
                     ? `${activeShift.location?.name || "Assigned location"} | ${formatDateTime(
                         activeShift.starts_at_utc,
-                      )} - ${formatDateTime(activeShift.ends_at_utc)}`
+                        activeShift.location_timezone || activeShift.timezone || "EAT",
+                      )} - ${formatDateTime(
+                        activeShift.ends_at_utc,
+                        activeShift.location_timezone || activeShift.timezone || "EAT",
+                      )}`
                     : "No active shift at the moment"}
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -615,11 +661,15 @@ const Dashboard = () => {
                       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <div className="rounded-xl bg-slate-50 p-3">
                           <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Starts</p>
-                          <p className="text-sm font-semibold text-slate-900">{formatDateTime(shift.start)}</p>
+                          <p className="text-sm font-semibold text-slate-900">
+                            {formatDateTime(shift.start, shift.timezone)}
+                          </p>
                         </div>
                         <div className="rounded-xl bg-slate-50 p-3">
                           <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Ends</p>
-                          <p className="text-sm font-semibold text-slate-900">{formatDateTime(shift.end)}</p>
+                          <p className="text-sm font-semibold text-slate-900">
+                            {formatDateTime(shift.end, shift.timezone)}
+                          </p>
                         </div>
                       </div>
                       <div className="mt-4 rounded-2xl border border-slate-200 p-3">
@@ -698,7 +748,14 @@ const Dashboard = () => {
               <div>
                 <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Schedule</p>
                 <p className="font-semibold text-slate-800">
-                  {viewingShift?.time?.range || `${formatDateTime(viewingShift?.start)} - ${formatDateTime(viewingShift?.end)}`}
+                  {viewingShift?.time?.range ||
+                    `${formatDateTime(
+                      viewingShift?.start,
+                      viewingShift?.timezone || viewingShift?.time?.timezone || "EAT",
+                    )} - ${formatDateTime(
+                      viewingShift?.end,
+                      viewingShift?.timezone || viewingShift?.time?.timezone || "EAT",
+                    )}`}
                 </p>
               </div>
               <div>

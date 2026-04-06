@@ -22,6 +22,26 @@ const formatDateTime = (value) => {
 };
 
 const getId = (item) => String(item?._id || item?.id || "");
+const ensureLeadingSlash = (path) => {
+  if (!path) return "";
+  if (String(path).startsWith("http://") || String(path).startsWith("https://")) return path;
+  return String(path).startsWith("/") ? path : `/${path}`;
+};
+const extractScheduleId = (item) =>
+  item?.schedule_id ||
+  item?.data?.schedule_id ||
+  item?.data?.scheduleId ||
+  item?.data?.id ||
+  "";
+const extractScheduleIdFromLink = (link) => {
+  if (!link || String(link).startsWith("http://") || String(link).startsWith("https://")) return "";
+  try {
+    const url = new URL(ensureLeadingSlash(link), "http://local.test");
+    return url.searchParams.get("scheduleId") || "";
+  } catch {
+    return "";
+  }
+};
 
 const statusPillClass = (status) => {
   const normalized = String(status || "").toLowerCase();
@@ -49,13 +69,27 @@ const Notifications = () => {
     return list.filter((item) => String(item?.status || "").toLowerCase() === activeFilter);
   }, [activeFilter, list]);
 
-  const navigateToNotificationLink = (link) => {
+  const navigateToNotificationLink = (link, item) => {
     if (!link) return;
     if (String(link).startsWith("http://") || String(link).startsWith("https://")) {
       window.open(link, "_blank", "noopener,noreferrer");
       return;
     }
-    navigate(link);
+    const internalLink = ensureLeadingSlash(link);
+    const pathOnly = internalLink.split("?")[0];
+
+    if (pathOnly === "/schedule") {
+      const scheduleId = String(extractScheduleIdFromLink(internalLink) || extractScheduleId(item) || "");
+      navigate("/schedule", {
+        state: {
+          openDrawer: true,
+          ...(scheduleId ? { scheduleId } : {}),
+        },
+      });
+      return;
+    }
+
+    navigate(internalLink);
   };
 
   const openNotification = async (item) => {
@@ -68,7 +102,7 @@ const Notifications = () => {
         dispatch(fetchUnreadCount(userId));
       }
     }
-    navigateToNotificationLink(item?.link);
+    navigateToNotificationLink(item?.link, item);
   };
 
   const markAllRead = async () => {

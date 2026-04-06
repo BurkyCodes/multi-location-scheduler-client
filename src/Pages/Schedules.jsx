@@ -1,11 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { Button } from "antd";
 import { CalendarClock, CheckCircle2, ChevronRight, Plus } from "lucide-react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import ModuleLayoutsOne from "../Layouts/ModuleLayoutsOne";
 import { createSchedule, fetchSchedules } from "../Store/Features/schedulesSlice";
 import { fetchLocations } from "../Store/Features/locationsSlice";
+import { fetchShifts } from "../Store/Features/shiftsSlice";
+import { fetchAssignments } from "../Store/Features/assignmentsSlice";
 import { colTitle } from "../SharedComponents/ColumnComponents/ColumnTitle";
 import ColumnData from "../SharedComponents/ColumnComponents/ColumnData";
 import StatusBadge from "../SharedComponents/ColumnComponents/StatusBadge";
@@ -29,6 +32,13 @@ const toDateValue = (value) => {
 
 const getLocationId = (location) =>
   location?._id || location?.id || location?.value || "";
+const getId = (value) => (typeof value === "object" ? value?._id || value?.id || "" : value || "");
+const formatDateTime = (value) => {
+  if (!value) return "N/A";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "N/A";
+  return date.toLocaleString();
+};
 
 const StepBadge = ({ active, complete, number, label }) => (
   <div className="flex items-center gap-2">
@@ -47,13 +57,20 @@ const StepBadge = ({ active, complete, number, label }) => (
 
 const Schedules = () => {
   const dispatch = useDispatch();
+  const location = useLocation();
+  const navigate = useNavigate();
   const { list, loading, saving } = useSelector((state) => state.schedules);
   const { list: locations } = useSelector((state) => state.locations);
+  const { list: shifts } = useSelector((state) => state.shifts);
+  const { list: assignments } = useSelector((state) => state.assignments);
   const currentUser = useSelector((state) => state.auth.user);
 
   const [values, setValues] = useState(initialValues);
   const [errors, setErrors] = useState({});
   const [step, setStep] = useState(0);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [selectedSchedule, setSelectedSchedule] = useState(null);
+  const deepLinkHandled = useRef(false);
 
   const roleLabel =
     currentUser?.role_id?.role ||
@@ -84,6 +101,8 @@ const Schedules = () => {
   useEffect(() => {
     dispatch(fetchSchedules());
     dispatch(fetchLocations());
+    dispatch(fetchShifts());
+    dispatch(fetchAssignments());
   }, [dispatch]);
 
   const onValueChange = (name, value) => {
@@ -108,6 +127,33 @@ const Schedules = () => {
     return Object.keys(nextErrors).length === 0;
   };
 
+  const scheduleInsights = useMemo(() => {
+    const byScheduleId = new Map();
+
+    (shifts || []).forEach((shift) => {
+      const scheduleId = String(getId(shift?.schedule_id));
+      if (!scheduleId) return;
+      const current = byScheduleId.get(scheduleId) || { shiftCount: 0, staff: new Map() };
+      current.shiftCount += 1;
+      byScheduleId.set(scheduleId, current);
+    });
+
+    (assignments || []).forEach((assignment) => {
+      const shift = assignment?.shift_id || {};
+      const scheduleId = String(getId(shift?.schedule_id) || getId(assignment?.schedule_id));
+      if (!scheduleId) return;
+
+      const current = byScheduleId.get(scheduleId) || { shiftCount: 0, staff: new Map() };
+      const user = assignment?.user_id || {};
+      const userId = String(getId(user) || getId(assignment?.user_id));
+      const userLabel = user?.name || user?.email || user?.phone_number || "Staff member";
+      if (userId) current.staff.set(userId, userLabel);
+      byScheduleId.set(scheduleId, current);
+    });
+
+    return byScheduleId;
+  }, [assignments, shifts]);
+
   const rows = useMemo(() => {
     const filtered = !isManager
       ? list
@@ -119,6 +165,7 @@ const Schedules = () => {
         });
 
     return filtered.map((item) => {
+        const scheduleId = String(getId(item));
         const locationFromRecord = item?.location_id;
         const locationId =
           typeof locationFromRecord === "object" ? getLocationId(locationFromRecord) : locationFromRecord;
@@ -127,15 +174,53 @@ const Schedules = () => {
             ? locationFromRecord?.name || "Unknown Location"
             : locations.find((loc) => `${getLocationId(loc)}` === `${locationId}`)?.name || "Unknown Location";
 
+        const insight = scheduleInsights.get(scheduleId) || { shiftCount: 0, staff: new Map() };
+        const staffList = Array.from(insight.staff.values());
+
         return {
-          key: item?._id || item?.id,
+          key: scheduleId,
           location: locationName,
           week_start_date: item?.week_start_date,
           edit_cutoff_hours: item?.edit_cutoff_hours ?? 48,
           status: item?.status || "draft",
+          shift_count: insight.shiftCount,
+          staff_count: staffList.length,
+          staff_preview: staffList.slice(0, 3).join(", "),
+          staff_names: staffList,
+          created_at: item?.createdAt || item?.created_at,
+          published_at: item?.published_at,
+          published_by:
+            item?.published_by?.name ||
+            item?.published_by?.email ||
+            item?.published_by?.phone_number ||
+            "",
         };
       });
-  }, [isManager, list, locations, userLocationIds]);
+  }, [isManager, list, locations, scheduleInsights, userLocationIds]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const requestedScheduleId = String(location.state?.scheduleId || params.get("scheduleId") || "");
+    const openDrawerRequested =
+      Boolean(location.state?.openDrawer) ||
+      params.get("openDrawer") === "1" ||
+      params.get("drawer") === "schedule";
+
+    if (deepLinkHandled.current || !requestedScheduleId || !openDrawerRequested || !rows.length) return;
+
+    const match = rows.find((row) => String(row.key) === requestedScheduleId);
+    if (!match) return;
+
+    queueMicrotask(() => {
+      setSelectedSchedule(match);
+      setDetailsOpen(true);
+    });
+    deepLinkHandled.current = true;
+
+    if (location.state?.openDrawer || location.state?.scheduleId) {
+      navigate(`${location.pathname}${location.search}`, { replace: true, state: {} });
+    }
+  }, [location.pathname, location.search, location.state, navigate, rows]);
 
   const handleSubmit = async (closeModal) => {
     if (step !== 1) return;
@@ -185,6 +270,17 @@ const Schedules = () => {
       key: "status",
       render: (status) => <StatusBadge status={status} />,
     },
+    {
+      title: colTitle("Staff"),
+      dataIndex: "staff_count",
+      key: "staff_count",
+      render: (value, row) => (
+        <ColumnData
+          text={`${value || 0} staff`}
+          description={row?.staff_preview || "No staff assigned"}
+        />
+      ),
+    },
   ];
 
   return (
@@ -207,6 +303,12 @@ const Schedules = () => {
         style: FONT,
         rowClassName: () => "transition-colors cursor-pointer",
         scroll: { x: 1100, y: 520 },
+        onRow: (record) => ({
+          onClick: () => {
+            setSelectedSchedule(record);
+            setDetailsOpen(true);
+          },
+        }),
       }}
       modalTitle="Create Schedule"
       modalSubtitle="2-step form with required schedule fields."
@@ -313,6 +415,69 @@ const Schedules = () => {
           </div>
         </div>
       )}
+      secondaryModalOpen={detailsOpen}
+      onSecondaryModalClose={() => {
+        setDetailsOpen(false);
+        setSelectedSchedule(null);
+      }}
+      secondaryModalTitle="Schedule Details"
+      secondaryModalSubtitle="Read-only schedule breakdown by location and staff."
+      secondaryModalContent={
+        selectedSchedule ? (
+          <div className="space-y-4 text-sm">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Location</p>
+              <p className="font-semibold text-slate-800">{selectedSchedule.location || "N/A"}</p>
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Week Start</p>
+              <p className="font-semibold text-slate-800">{toDateValue(selectedSchedule.week_start_date)}</p>
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Status</p>
+              <StatusBadge status={selectedSchedule.status} />
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Shifts in Schedule</p>
+              <p className="font-semibold text-slate-800">{selectedSchedule.shift_count || 0}</p>
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Assigned Staff</p>
+              <p className="font-semibold text-slate-800">{selectedSchedule.staff_count || 0}</p>
+              {selectedSchedule.staff_names?.length ? (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {selectedSchedule.staff_names.map((name, index) => (
+                    <span
+                      key={`${name}-${index}`}
+                      className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-700"
+                    >
+                      {name}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-slate-500 mt-1">No staff assigned yet.</p>
+              )}
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Edit Cutoff</p>
+              <p className="font-semibold text-slate-800">{selectedSchedule.edit_cutoff_hours} hours</p>
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Published By</p>
+              <p className="font-semibold text-slate-800">{selectedSchedule.published_by || "Not published yet"}</p>
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Created</p>
+              <p className="font-semibold text-slate-800">{formatDateTime(selectedSchedule.created_at)}</p>
+            </div>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-500">Published At</p>
+              <p className="font-semibold text-slate-800">{formatDateTime(selectedSchedule.published_at)}</p>
+            </div>
+          </div>
+        ) : null
+      }
     />
   );
 };

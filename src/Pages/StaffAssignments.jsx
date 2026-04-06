@@ -14,6 +14,7 @@ import {
 import { fetchShifts } from "../Store/Features/shiftsSlice";
 import { fetchStaff } from "../Store/Features/staffSlice";
 import { fetchLocations } from "../Store/Features/locationsSlice";
+import { fetchAvailabilityByUser } from "../Store/Features/availabilitySlice";
 import { colTitle } from "../SharedComponents/ColumnComponents/ColumnTitle";
 import ColumnData from "../SharedComponents/ColumnComponents/ColumnData";
 import StatusBadge from "../SharedComponents/ColumnComponents/StatusBadge";
@@ -82,6 +83,7 @@ const StaffAssignments = () => {
   const shifts = useSelector((state) => state.shifts.list);
   const staff = useSelector((state) => state.staff.list);
   const locations = useSelector((state) => state.locations.list);
+  const availabilityByUser = useSelector((state) => state.availability.byUser);
 
   const canManageAssignments = hasRole(currentUser, ["manager"]);
   const isManager = hasRole(currentUser, ["manager"]);
@@ -198,6 +200,30 @@ const StaffAssignments = () => {
     if (!canManageAssignments || !selectedShiftId) return;
     dispatch(fetchCoverageRecommendations({ shiftId: selectedShiftId, limit: 8 }));
   }, [canManageAssignments, dispatch, selectedShiftId]);
+  useEffect(() => {
+    if (!canManageAssignments || !selectedStaffId) return;
+    dispatch(fetchAvailabilityByUser(selectedStaffId));
+  }, [canManageAssignments, dispatch, selectedStaffId]);
+
+  const selectedShift = useMemo(
+    () => (shifts || []).find((item) => String(getId(item)) === String(selectedShiftId || "")) || null,
+    [selectedShiftId, shifts],
+  );
+  const selectedShiftTimezoneCode = useMemo(
+    () => normalizeTimezoneCode(selectedShift?.location_timezone || selectedShift?.timezone),
+    [selectedShift],
+  );
+  const selectedStaffAvailability = availabilityByUser[String(selectedStaffId || "")];
+  const selectedStaffAvailabilityTimezoneCode = useMemo(() => {
+    const recurringTz = selectedStaffAvailability?.recurring_windows?.[0]?.timezone;
+    const exceptionTz = selectedStaffAvailability?.exceptions?.[0]?.timezone;
+    const raw = recurringTz || exceptionTz || "";
+    return raw ? normalizeTimezoneCode(raw) : "";
+  }, [selectedStaffAvailability]);
+  const timezoneMatch = useMemo(() => {
+    if (!selectedShiftTimezoneCode || !selectedStaffAvailabilityTimezoneCode) return null;
+    return selectedShiftTimezoneCode === selectedStaffAvailabilityTimezoneCode;
+  }, [selectedShiftTimezoneCode, selectedStaffAvailabilityTimezoneCode]);
 
   const resetForm = () => {
     setSelectedShiftId("");
@@ -263,8 +289,9 @@ const StaffAssignments = () => {
           (item) => item?.rule === "seventh_day_override_required",
         );
         if (requiresSeventhDayOverride) {
+          setSeventhDayOverrideEnabled(true);
           toast.error(
-            "7th consecutive day requires manager override. Enable override and provide a reason.",
+            "This assignment hits a 7th consecutive day. Enter an override reason to continue.",
           );
         }
         setConstraintModal({
@@ -441,29 +468,47 @@ const StaffAssignments = () => {
                       : "Select a shift to load availability-based recommendations."}
                 </p>
               ) : null}
-            </div>
-            <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
-              <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-amber-800">
-                <input
-                  type="checkbox"
-                  checked={seventhDayOverrideEnabled}
-                  onChange={(event) => setSeventhDayOverrideEnabled(event.target.checked)}
-                />
-                7th Day Override
-              </label>
-              <p className="mt-1 text-[11px] text-amber-700">
-                Use only when assignment hits 7th consecutive workday. Reason is required.
-              </p>
-              {seventhDayOverrideEnabled ? (
-                <textarea
-                  className="mt-2 w-full rounded-lg border border-amber-300 bg-white p-2 text-xs text-slate-700"
-                  rows={3}
-                  value={seventhDayOverrideReason}
-                  onChange={(event) => setSeventhDayOverrideReason(event.target.value)}
-                  placeholder="Document the compliance override reason..."
-                />
+              {selectedShiftId && selectedStaffId ? (
+                <p className="mt-2 text-[11px]">
+                  <span className="font-bold text-slate-700">Timezone Match:</span>{" "}
+                  {timezoneMatch === null ? (
+                    <span className="text-slate-500">Checking staff availability timezone...</span>
+                  ) : timezoneMatch ? (
+                    <span className="text-emerald-700 font-semibold">
+                      Yes ({selectedShiftTimezoneCode})
+                    </span>
+                  ) : (
+                    <span className="text-amber-700 font-semibold">
+                      No (Shift: {selectedShiftTimezoneCode} | Availability: {selectedStaffAvailabilityTimezoneCode})
+                    </span>
+                  )}
+                </p>
               ) : null}
             </div>
+            {selectedShiftId && selectedStaffId ? (
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-amber-800">
+                  <input
+                    type="checkbox"
+                    checked={seventhDayOverrideEnabled}
+                    onChange={(event) => setSeventhDayOverrideEnabled(event.target.checked)}
+                  />
+                  7th Day Override
+                </label>
+                <p className="mt-1 text-[11px] text-amber-700">
+                  Enable only when this staff member is being assigned on a 7th consecutive workday.
+                </p>
+                {seventhDayOverrideEnabled ? (
+                  <textarea
+                    className="mt-2 w-full rounded-lg border border-amber-300 bg-white p-2 text-xs text-slate-700"
+                    rows={3}
+                    value={seventhDayOverrideReason}
+                    onChange={(event) => setSeventhDayOverrideReason(event.target.value)}
+                    placeholder="Enter manager reason for this override..."
+                  />
+                ) : null}
+              </div>
+            ) : null}
             <div className="mt-auto flex items-center justify-between">
               <Button htmlType="button" onClick={() => { resetForm(); closeModal(); }}>
                 Cancel

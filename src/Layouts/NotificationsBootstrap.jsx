@@ -25,6 +25,20 @@ const ensureLeadingSlash = (path) => {
   if (String(path).startsWith("http://") || String(path).startsWith("https://")) return path;
   return String(path).startsWith("/") ? path : `/${path}`;
 };
+const extractScheduleId = (payload = {}) =>
+  payload?.schedule_id ||
+  payload?.scheduleId ||
+  payload?.id ||
+  "";
+const extractScheduleIdFromLink = (link) => {
+  if (!link || String(link).startsWith("http://") || String(link).startsWith("https://")) return "";
+  try {
+    const url = new URL(ensureLeadingSlash(link), "http://local.test");
+    return url.searchParams.get("scheduleId") || "";
+  } catch {
+    return "";
+  }
+};
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
 const REALTIME_STATUS_EVENT = "realtime-connection-status";
@@ -235,7 +249,20 @@ const NotificationsBootstrap = () => {
                   if (link.startsWith("http")) {
                     window.open(link, "_blank", "noopener,noreferrer");
                   } else {
-                    navigate(link);
+                    const pathOnly = link.split("?")[0];
+                    if (pathOnly === "/schedule") {
+                      const scheduleId = String(
+                        extractScheduleIdFromLink(link) || extractScheduleId(payload?.data || {})
+                      );
+                      navigate("/schedule", {
+                        state: {
+                          openDrawer: true,
+                          ...(scheduleId ? { scheduleId } : {}),
+                        },
+                      });
+                    } else {
+                      navigate(link);
+                    }
                   }
                 },
               }
@@ -251,6 +278,19 @@ const NotificationsBootstrap = () => {
       if (event?.data?.type !== "notification_click") return;
       const link = ensureLeadingSlash(event?.data?.link);
       if (!link) return;
+      const pathOnly = link.split("?")[0];
+      if (pathOnly === "/schedule") {
+        const scheduleId = String(
+          extractScheduleIdFromLink(link) || extractScheduleId(event?.data || {})
+        );
+        navigate("/schedule", {
+          state: {
+            openDrawer: true,
+            ...(scheduleId ? { scheduleId } : {}),
+          },
+        });
+        return;
+      }
       navigate(link);
     };
     navigator.serviceWorker?.addEventListener("message", swClickHandler);
