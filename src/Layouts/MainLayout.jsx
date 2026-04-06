@@ -189,31 +189,35 @@ const MainLayout = () => {
           )}
         </div>
 
-        <div className="mt-4 px-3 flex flex-col justify-between h-[calc(100%-120px)]">
+        <div className="mt-2 px-3 pb-4 flex flex-col h-[calc(100%-108px)] min-h-0">
           <Menu
             mode="inline"
             selectedKeys={[location.pathname]}
             items={menuItems}
             onClick={({ key }) => onMenuNavigate(key)}
-            className="border-none"
+            className="border-none flex-1 min-h-0 overflow-y-auto pr-1"
             style={{
               fontFamily: "'Montserrat', sans-serif",
               fontWeight: 600,
               backgroundColor: PALETTE.white,
+              maxHeight: "100%",
+              overflowY: "auto",
             }}
           />
-          <Menu
-            mode="inline"
-            selectedKeys={[location.pathname]}
-            items={bottomMenuItems}
-            onClick={({ key }) => onMenuNavigate(key)}
-            className="border-none mt-auto pb-4"
-            style={{
-              fontFamily: "'Montserrat', sans-serif",
-              fontWeight: 600,
-              backgroundColor: PALETTE.white,
-            }}
-          />
+          <div className="mt-2 pt-2 border-t border-slate-100 bg-white shrink-0">
+            <Menu
+              mode="inline"
+              selectedKeys={[location.pathname]}
+              items={bottomMenuItems}
+              onClick={({ key }) => onMenuNavigate(key)}
+              className="border-none"
+              style={{
+                fontFamily: "'Montserrat', sans-serif",
+                fontWeight: 600,
+                backgroundColor: PALETTE.white,
+              }}
+            />
+          </div>
         </div>
       </Sider>
 
