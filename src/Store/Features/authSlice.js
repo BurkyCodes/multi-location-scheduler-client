@@ -73,7 +73,7 @@ export const verifyPhoneNumber = createAsyncThunk(
 export const logout = createAsyncThunk("auth/logout", async (_, { rejectWithValue }) => {
   try {
     await apiRequest("/v1/auth/logout", {
-      method: "DELETE",
+      method: "POST",
       ...tokenConfig(),
     });
   } catch (error) {
