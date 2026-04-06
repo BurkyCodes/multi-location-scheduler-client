@@ -66,9 +66,7 @@ const NotificationsBootstrap = () => {
   const inAppEnabled = Boolean(
     notificationPrefs?.channels?.in_app ??
       notificationPrefs?.in_app_enabled ??
-      notificationPrefs?.channels?.email ??
-      notificationPrefs?.email_enabled ??
-      notificationPrefs?.email
+      true
   );
 
   useEffect(() => {

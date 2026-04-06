@@ -65,7 +65,8 @@ export const fetchNotificationPreferenceByUser = createAsyncThunk(
       if (error?.status === 404) {
         return {
           user_id: userId,
-          channels: { in_app: false, email: false },
+          channels: { in_app: true, email: false },
+          delivery_mode: "in_app_only",
         };
       }
       return rejectWithValue(getErrorMessage(error, "Failed to fetch notification preference"));

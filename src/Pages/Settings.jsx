@@ -17,6 +17,7 @@ const Settings = () => {
     (state) => state.preferences.notificationsByUser[user?._id],
   );
   const [inAppEnabled, setInAppEnabled] = useState();
+  const [emailEnabled, setEmailEnabled] = useState();
 
   useEffect(() => {
     if (!user?._id) return;
@@ -27,8 +28,14 @@ const Settings = () => {
     inAppEnabled ??
     Boolean(
       notificationPrefs?.channels?.in_app ??
-      notificationPrefs?.in_app_enabled ??
-        notificationPrefs?.channels?.email ??
+        notificationPrefs?.in_app_enabled ??
+        true,
+    );
+
+  const effectiveEmailEnabled =
+    emailEnabled ??
+    Boolean(
+      notificationPrefs?.channels?.email ??
         notificationPrefs?.email_enabled ??
         notificationPrefs?.email,
     );
@@ -40,10 +47,18 @@ const Settings = () => {
         user_id: user._id,
         channels: {
           in_app: effectiveInAppEnabled,
-          email: effectiveInAppEnabled,
+          email: effectiveEmailEnabled,
         },
         in_app_enabled: effectiveInAppEnabled,
-        email_enabled: effectiveInAppEnabled,
+        email_enabled: effectiveEmailEnabled,
+        delivery_mode:
+          effectiveInAppEnabled && effectiveEmailEnabled
+            ? "in_app_plus_email"
+            : effectiveInAppEnabled
+              ? "in_app_only"
+              : effectiveEmailEnabled
+                ? "email_only"
+                : "none",
         sms_enabled: false,
       }),
     );
@@ -69,6 +84,10 @@ const Settings = () => {
               <div className="flex items-center justify-between">
                 <span className="text-sm text-slate-700">In-app Notifications</span>
                 <Switch checked={effectiveInAppEnabled} onChange={setInAppEnabled} />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-slate-700">Email Notifications</span>
+                <Switch checked={effectiveEmailEnabled} onChange={setEmailEnabled} />
               </div>
             </div>
             <Button
