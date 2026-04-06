@@ -189,7 +189,7 @@ const MainLayout = () => {
           )}
         </div>
 
-        <div className="mt-2 px-3 pb-4 flex flex-col h-[calc(100%-108px)] min-h-0">
+        <div className="mt-2 px-3 pb-8 flex flex-col h-[calc(100%-108px)] min-h-0">
           <Menu
             mode="inline"
             selectedKeys={[location.pathname]}
