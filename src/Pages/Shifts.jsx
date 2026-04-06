@@ -67,6 +67,12 @@ const isPendingLikeStatus = (status) => {
   const normalized = String(status || "").toLowerCase();
   return normalized.includes("pending") || normalized === "processing";
 };
+const isPastShift = (endAt) => {
+  if (!endAt) return false;
+  const endDate = new Date(endAt);
+  if (Number.isNaN(endDate.getTime())) return false;
+  return endDate.getTime() < Date.now();
+};
 const getAssignmentId = (assignment) =>
   String(
     assignment?._id ||
@@ -580,6 +586,7 @@ const Shifts = () => {
       end: shift?.ends_at_utc || assignment?.ends_at_utc,
       timezone: shift?.location_timezone || shift?.timezone || "EAT",
       status,
+      isPastShift: isPastShift(shift?.ends_at_utc || assignment?.ends_at_utc),
     };
   });
 
@@ -785,6 +792,10 @@ const Shifts = () => {
       toast.error("Could not request swap. Assignment details are incomplete.");
       return;
     }
+    if (assignment?.isPastShift) {
+      toast.error("Past shifts cannot be swapped.");
+      return;
+    }
     if (pendingSwapCount >= 3) {
       toast.error("You can only have up to 3 pending swap/drop requests at a time.");
       return;
@@ -856,7 +867,13 @@ const Shifts = () => {
                         <h3 className="text-lg font-black text-slate-900">{shift.title}</h3>
                         <p className="text-xs text-slate-500 mt-1">{shift.timezone}</p>
                       </div>
-                      <StatusBadge status={shift.status} />
+                      {shift.isPastShift ? (
+                        <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                          Past Shift
+                        </span>
+                      ) : (
+                        <StatusBadge status={shift.status} />
+                      )}
                     </div>
                     <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <div className="rounded-xl bg-slate-50 p-3">
@@ -875,41 +892,49 @@ const Shifts = () => {
                     <div className="mt-4 rounded-2xl border border-slate-200 p-3">
                       <p className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-500">Quick Actions</p>
                       <div className="flex flex-wrap gap-2">
-                        {shift.status === "assigned" ? (
-                          <Button size="small" type="primary" loading={quickActionLoading} onClick={() => runQuickAction("clock_in", shift.id)}>
-                            Clock In
-                          </Button>
-                        ) : null}
-                        {shift.status === "in-progress" ? (
+                        {shift.isPastShift ? (
+                          <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Past Shift
+                          </span>
+                        ) : (
                           <>
-                            <Button size="small" loading={quickActionLoading} onClick={() => runQuickAction("pause", shift.id)}>
-                              Pause
-                            </Button>
-                            <Button size="small" danger loading={quickActionLoading} onClick={() => runQuickAction("clock_out", shift.id)}>
-                              Clock Out
+                            {shift.status === "assigned" ? (
+                              <Button size="small" type="primary" loading={quickActionLoading} onClick={() => runQuickAction("clock_in", shift.id)}>
+                                Clock In
+                              </Button>
+                            ) : null}
+                            {shift.status === "in-progress" ? (
+                              <>
+                                <Button size="small" loading={quickActionLoading} onClick={() => runQuickAction("pause", shift.id)}>
+                                  Pause
+                                </Button>
+                                <Button size="small" danger loading={quickActionLoading} onClick={() => runQuickAction("clock_out", shift.id)}>
+                                  Clock Out
+                                </Button>
+                              </>
+                            ) : null}
+                            {shift.status === "paused" ? (
+                              <>
+                                <Button size="small" type="primary" loading={quickActionLoading} onClick={() => runQuickAction("resume", shift.id)}>
+                                  Resume
+                                </Button>
+                                <Button size="small" danger loading={quickActionLoading} onClick={() => runQuickAction("clock_out", shift.id)}>
+                                  Clock Out
+                                </Button>
+                              </>
+                            ) : null}
+                            <Button
+                              size="small"
+                              loading={swapSaving}
+                              disabled={pendingSwapAssignmentIds.has(String(shift.id))}
+                              onClick={() => requestSwap(shift)}
+                            >
+                              {pendingSwapAssignmentIds.has(String(shift.id))
+                                ? "Requested Swap"
+                                : "Request Swap"}
                             </Button>
                           </>
-                        ) : null}
-                        {shift.status === "paused" ? (
-                          <>
-                            <Button size="small" type="primary" loading={quickActionLoading} onClick={() => runQuickAction("resume", shift.id)}>
-                              Resume
-                            </Button>
-                            <Button size="small" danger loading={quickActionLoading} onClick={() => runQuickAction("clock_out", shift.id)}>
-                              Clock Out
-                            </Button>
-                          </>
-                        ) : null}
-                        <Button
-                          size="small"
-                          loading={swapSaving}
-                          disabled={pendingSwapAssignmentIds.has(String(shift.id))}
-                          onClick={() => requestSwap(shift)}
-                        >
-                          {pendingSwapAssignmentIds.has(String(shift.id))
-                            ? "Requested Swap"
-                            : "Request Swap"}
-                        </Button>
+                        )}
                       </div>
                     </div>
                   </div>

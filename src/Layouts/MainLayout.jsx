@@ -251,28 +251,12 @@ const MainLayout = () => {
 
           <div className="flex flex-row  items-center gap-3">
             {showRealtimeBadge ? (
-              <div
-                className="hidden md:flex items-center gap-2 rounded-full px-3 py-1"
-                style={{
-                  border: `1px solid ${realtimeUi.border}`,
-                  backgroundColor: realtimeUi.bg,
-                }}
+              <span
+                className="hidden md:flex text-[11px] font-bold uppercase tracking-wide"
+                style={{ color: realtimeUi.text, fontFamily: "'Montserrat', sans-serif" }}
               >
-                <span
-                  style={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: 999,
-                    backgroundColor: realtimeUi.dot,
-                  }}
-                />
-                <span
-                  className="text-[11px] font-bold uppercase tracking-wide"
-                  style={{ color: realtimeUi.text, fontFamily: "'Montserrat', sans-serif" }}
-                >
-                  {realtimeUi.label}
-                </span>
-              </div>
+                {realtimeUi.label}
+              </span>
             ) : null}
             <Badge count={inAppEnabled ? unreadCount : 0} size="small" offset={[-2, 4]}>
               <Button

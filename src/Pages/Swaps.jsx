@@ -54,6 +54,12 @@ const isPendingLikeStatus = (status) => {
   const normalized = String(status || "").toLowerCase();
   return normalized.includes("pending") || normalized === "processing";
 };
+const isPastShift = (endAt) => {
+  if (!endAt) return false;
+  const endDate = new Date(endAt);
+  if (Number.isNaN(endDate.getTime())) return false;
+  return endDate.getTime() < Date.now();
+};
 const timezoneCodeToIana = (value) => {
   const normalized = String(value || "").trim().toUpperCase();
   if (
@@ -233,6 +239,7 @@ const Swaps = () => {
       end: shift?.ends_at_utc || assignment?.ends_at_utc,
       timezone: shift?.location_timezone || shift?.timezone || "EAT",
       status,
+      isPastShift: isPastShift(shift?.ends_at_utc || assignment?.ends_at_utc),
     };
   });
 
@@ -312,6 +319,10 @@ const Swaps = () => {
   const submitSwapRequest = async (assignment) => {
     if (!assignment?.shiftId || !assignment?.id || !userId) {
       toast.error("Could not request swap. Assignment details are incomplete.");
+      return;
+    }
+    if (assignment?.isPastShift) {
+      toast.error("Past shifts cannot be swapped.");
       return;
     }
     if (pendingSwapRequests.length >= 3) {
@@ -625,7 +636,13 @@ const Swaps = () => {
                     <h3 className="text-lg font-black text-slate-900">{shift.title}</h3>
                     <p className="text-xs text-slate-500 mt-1">{shift.timezone}</p>
                   </div>
-                  <StatusBadge status={shift.status} />
+                  {shift.isPastShift ? (
+                    <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                      Past Shift
+                    </span>
+                  ) : (
+                    <StatusBadge status={shift.status} />
+                  )}
                 </div>
 
                 <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -642,64 +659,72 @@ const Swaps = () => {
                 <div className="mt-4 rounded-2xl border border-slate-200 p-3">
                   <p className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-500">Quick Actions</p>
                   <div className="flex flex-wrap gap-2">
-                    {shift.status === "assigned" ? (
-                      <Button
-                        type="primary"
-                        icon={<PlayCircle size={14} />}
-                        loading={quickActionLoading}
-                        onClick={() => handleQuickAction(shift.id, "clock-in")}
-                      >
-                        Clock In
-                      </Button>
-                    ) : null}
-                    {shift.status === "in-progress" ? (
+                    {shift.isPastShift ? (
+                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Past Shift
+                      </span>
+                    ) : (
                       <>
+                        {shift.status === "assigned" ? (
+                          <Button
+                            type="primary"
+                            icon={<PlayCircle size={14} />}
+                            loading={quickActionLoading}
+                            onClick={() => handleQuickAction(shift.id, "clock-in")}
+                          >
+                            Clock In
+                          </Button>
+                        ) : null}
+                        {shift.status === "in-progress" ? (
+                          <>
+                            <Button
+                              icon={<PauseCircle size={14} />}
+                              loading={quickActionLoading}
+                              onClick={() => handleQuickAction(shift.id, "pause")}
+                            >
+                              Pause
+                            </Button>
+                            <Button
+                              icon={<StopCircle size={14} />}
+                              loading={quickActionLoading}
+                              onClick={() => handleQuickAction(shift.id, "clock-out")}
+                            >
+                              Clock Out
+                            </Button>
+                          </>
+                        ) : null}
+                        {shift.status === "paused" ? (
+                          <>
+                            <Button
+                              type="primary"
+                              icon={<PlayCircle size={14} />}
+                              loading={quickActionLoading}
+                              onClick={() => handleQuickAction(shift.id, "resume")}
+                            >
+                              Resume
+                            </Button>
+                            <Button
+                              icon={<StopCircle size={14} />}
+                              loading={quickActionLoading}
+                              onClick={() => handleQuickAction(shift.id, "clock-out")}
+                            >
+                              Clock Out
+                            </Button>
+                          </>
+                        ) : null}
                         <Button
-                          icon={<PauseCircle size={14} />}
-                          loading={quickActionLoading}
-                          onClick={() => handleQuickAction(shift.id, "pause")}
+                          type="default"
+                          icon={<ArrowLeftRight size={14} />}
+                          loading={saving && requestingSwapId === shift.id}
+                          disabled={myPendingSwapAssignmentIds.has(String(shift.id))}
+                          onClick={() => submitSwapRequest(shift)}
                         >
-                          Pause
-                        </Button>
-                        <Button
-                          icon={<StopCircle size={14} />}
-                          loading={quickActionLoading}
-                          onClick={() => handleQuickAction(shift.id, "clock-out")}
-                        >
-                          Clock Out
+                          {myPendingSwapAssignmentIds.has(String(shift.id))
+                            ? "Requested Swap"
+                            : "Request Swap"}
                         </Button>
                       </>
-                    ) : null}
-                    {shift.status === "paused" ? (
-                      <>
-                        <Button
-                          type="primary"
-                          icon={<PlayCircle size={14} />}
-                          loading={quickActionLoading}
-                          onClick={() => handleQuickAction(shift.id, "resume")}
-                        >
-                          Resume
-                        </Button>
-                        <Button
-                          icon={<StopCircle size={14} />}
-                          loading={quickActionLoading}
-                          onClick={() => handleQuickAction(shift.id, "clock-out")}
-                        >
-                          Clock Out
-                        </Button>
-                      </>
-                    ) : null}
-                    <Button
-                      type="default"
-                      icon={<ArrowLeftRight size={14} />}
-                      loading={saving && requestingSwapId === shift.id}
-                      disabled={myPendingSwapAssignmentIds.has(String(shift.id))}
-                      onClick={() => submitSwapRequest(shift)}
-                    >
-                      {myPendingSwapAssignmentIds.has(String(shift.id))
-                        ? "Requested Swap"
-                        : "Request Swap"}
-                    </Button>
+                    )}
                   </div>
                 </div>
               </div>

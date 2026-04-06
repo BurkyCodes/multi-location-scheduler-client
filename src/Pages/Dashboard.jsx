@@ -40,6 +40,12 @@ const formatDateTime = (value) => {
   if (Number.isNaN(date.getTime())) return "N/A";
   return date.toLocaleString();
 };
+const isPastShift = (endAt) => {
+  if (!endAt) return false;
+  const endDate = new Date(endAt);
+  if (Number.isNaN(endDate.getTime())) return false;
+  return endDate.getTime() < Date.now();
+};
 
 const getId = (value) => (typeof value === "object" ? value?._id || value?.id : value);
 const toErrorMessage = (payload, fallback) => {
@@ -315,29 +321,31 @@ const Dashboard = () => {
         </div>
         <div className="xl:col-span-1 space-y-4">
           <ActionAuditTable items={auditLogs.slice(0, 8)} />
-          <div className="rounded-2xl border border-rose-100 bg-rose-50 p-4">
-            <div className="text-xs font-bold uppercase tracking-wide text-rose-700">
-              Labor Compliance
-            </div>
-            <div className="mt-1 text-sm font-semibold text-rose-800">
-              {openLaborAlerts.length} open alert(s)
-            </div>
-            <div className="mt-2 space-y-2">
-              {(openLaborAlerts || []).slice(0, 3).map((alert) => (
-                <div key={alert?._id || alert?.id} className="rounded-lg bg-white p-2 text-xs text-slate-700">
-                  <div className="font-bold text-slate-800">{alert?.type || "Labor alert"}</div>
-                  <div>{alert?.message || "Compliance warning"}</div>
-                </div>
-              ))}
-              {laborAlertsLoading ? (
-                <div className="text-xs text-slate-500">Loading labor alerts...</div>
-              ) : null}
-            </div>
-          </div>
         </div>
       </div>
     ),
-    [statCards, auditLogs, openLaborAlerts, laborAlertsLoading],
+    [statCards, auditLogs],
+  );
+  const laborComplianceContent = (
+    <div className="rounded-2xl border border-rose-100 bg-rose-50 p-4">
+      <div className="text-xs font-bold uppercase tracking-wide text-rose-700">
+        Labor Compliance
+      </div>
+      <div className="mt-1 text-sm font-semibold text-rose-800">
+        {openLaborAlerts.length} open alert(s)
+      </div>
+      <div className="mt-2 space-y-2">
+        {(openLaborAlerts || []).slice(0, 3).map((alert) => (
+          <div key={alert?._id || alert?.id} className="rounded-lg bg-white p-2 text-xs text-slate-700">
+            <div className="font-bold text-slate-800">{alert?.type || "Labor alert"}</div>
+            <div>{alert?.message || "Compliance warning"}</div>
+          </div>
+        ))}
+        {laborAlertsLoading ? (
+          <div className="text-xs text-slate-500">Loading labor alerts...</div>
+        ) : null}
+      </div>
+    </div>
   );
 
   const availabilitySummary = useMemo(() => {
@@ -366,6 +374,7 @@ const Dashboard = () => {
       end: shift?.ends_at_utc || assignment?.ends_at_utc,
       timezone: shift?.location_timezone || shift?.timezone || "EAT",
       status,
+      isPastShift: isPastShift(shift?.ends_at_utc || assignment?.ends_at_utc),
     };
   });
 
@@ -434,6 +443,10 @@ const Dashboard = () => {
 
   const requestSwap = async (assignment) => {
     if (!assignment?.shiftId || !assignment?.id || !currentUserId) return;
+    if (assignment?.isPastShift) {
+      toast.error("Past shifts cannot be swapped.");
+      return;
+    }
     if (myPendingSwapCount >= 3) {
       toast.error("You can only have up to 3 pending swap/drop requests at a time.");
       return;
@@ -560,7 +573,13 @@ const Dashboard = () => {
                           <h3 className="text-lg font-black text-slate-900">{shift.title}</h3>
                           <p className="text-xs text-slate-500 mt-1">{shift.timezone}</p>
                         </div>
-                        <StatusBadge status={shift.status} />
+                        {shift.isPastShift ? (
+                          <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                            Past Shift
+                          </span>
+                        ) : (
+                          <StatusBadge status={shift.status} />
+                        )}
                       </div>
                       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <div className="rounded-xl bg-slate-50 p-3">
@@ -575,41 +594,49 @@ const Dashboard = () => {
                       <div className="mt-4 rounded-2xl border border-slate-200 p-3">
                         <p className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-500">Quick Actions</p>
                         <div className="flex flex-wrap gap-2">
-                          {shift.status === "assigned" ? (
-                            <Button size="small" type="primary" loading={quickActionLoading} onClick={() => runQuickAction("clock_in", shift.id)}>
-                              Clock In
-                            </Button>
-                          ) : null}
-                          {shift.status === "in-progress" ? (
+                          {shift.isPastShift ? (
+                            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                              Past Shift
+                            </span>
+                          ) : (
                             <>
-                              <Button size="small" loading={quickActionLoading} onClick={() => runQuickAction("pause", shift.id)}>
-                                Pause
-                              </Button>
-                              <Button size="small" danger loading={quickActionLoading} onClick={() => runQuickAction("clock_out", shift.id)}>
-                                Clock Out
+                              {shift.status === "assigned" ? (
+                                <Button size="small" type="primary" loading={quickActionLoading} onClick={() => runQuickAction("clock_in", shift.id)}>
+                                  Clock In
+                                </Button>
+                              ) : null}
+                              {shift.status === "in-progress" ? (
+                                <>
+                                  <Button size="small" loading={quickActionLoading} onClick={() => runQuickAction("pause", shift.id)}>
+                                    Pause
+                                  </Button>
+                                  <Button size="small" danger loading={quickActionLoading} onClick={() => runQuickAction("clock_out", shift.id)}>
+                                    Clock Out
+                                  </Button>
+                                </>
+                              ) : null}
+                              {shift.status === "paused" ? (
+                                <>
+                                  <Button size="small" type="primary" loading={quickActionLoading} onClick={() => runQuickAction("resume", shift.id)}>
+                                    Resume
+                                  </Button>
+                                  <Button size="small" danger loading={quickActionLoading} onClick={() => runQuickAction("clock_out", shift.id)}>
+                                    Clock Out
+                                  </Button>
+                                </>
+                              ) : null}
+                              <Button
+                                size="small"
+                                loading={swapSaving}
+                                disabled={myPendingSwapAssignmentIds.has(String(shift.id))}
+                                onClick={() => requestSwap(shift)}
+                              >
+                                {myPendingSwapAssignmentIds.has(String(shift.id))
+                                  ? "Requested Swap"
+                                  : "Request Swap"}
                               </Button>
                             </>
-                          ) : null}
-                          {shift.status === "paused" ? (
-                            <>
-                              <Button size="small" type="primary" loading={quickActionLoading} onClick={() => runQuickAction("resume", shift.id)}>
-                                Resume
-                              </Button>
-                              <Button size="small" danger loading={quickActionLoading} onClick={() => runQuickAction("clock_out", shift.id)}>
-                                Clock Out
-                              </Button>
-                            </>
-                          ) : null}
-                          <Button
-                            size="small"
-                            loading={swapSaving}
-                            disabled={myPendingSwapAssignmentIds.has(String(shift.id))}
-                            onClick={() => requestSwap(shift)}
-                          >
-                            {myPendingSwapAssignmentIds.has(String(shift.id))
-                              ? "Requested Swap"
-                              : "Request Swap"}
-                          </Button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -684,6 +711,7 @@ const Dashboard = () => {
           },
         }),
       }}
+      afterTableContent={laborComplianceContent}
       secondaryModalOpen={viewOpen}
       onSecondaryModalClose={() => {
         setViewOpen(false);

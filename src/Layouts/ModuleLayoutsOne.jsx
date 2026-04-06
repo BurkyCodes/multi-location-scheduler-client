@@ -59,6 +59,7 @@ const ModuleLayoutsOne = ({
   tableHeaderBadges,
   tableHeaderAction,
   tableExtra,
+  afterTableContent,
   enableListViewToggle,
   isTrashView,
   loading,
@@ -268,6 +269,14 @@ const ModuleLayoutsOne = ({
                 </>
               ) : null)}
           </div>
+        </div>
+      ) : null}
+
+      {afterTableContent ? (
+        <div className="px-2">
+          {typeof afterTableContent === "function"
+            ? afterTableContent({ viewType, setViewType })
+            : afterTableContent}
         </div>
       ) : null}
 

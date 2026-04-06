@@ -1,25 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Button, Card, Select, Tag } from "antd";
+import { Button, Select, Tag } from "antd";
 import { Clock3 } from "lucide-react";
 import ModuleLayoutsOne from "../Layouts/ModuleLayoutsOne";
-import { fetchAssignmentInsights, fetchWorkedHours } from "../Store/Features/workedHoursSlice";
-import { fetchShifts } from "../Store/Features/shiftsSlice";
+import { fetchWorkedHours } from "../Store/Features/workedHoursSlice";
 import { fetchStaff } from "../Store/Features/staffSlice";
 
 const EmployeeHours = () => {
   const dispatch = useDispatch();
   const [period, setPeriod] = useState("week");
-  const [selectedShiftId, setSelectedShiftId] = useState("");
   const [selectedStaffId, setSelectedStaffId] = useState("");
 
-  const { list, loading, insights, insightsLoading } = useSelector((state) => state.workedHours);
-  const shifts = useSelector((state) => state.shifts.list);
+  const { list, loading } = useSelector((state) => state.workedHours);
   const staff = useSelector((state) => state.staff.list);
 
   useEffect(() => {
     dispatch(fetchWorkedHours({ period: "week" }));
-    dispatch(fetchShifts());
     dispatch(fetchStaff());
   }, [dispatch]);
 
@@ -27,12 +23,6 @@ const EmployeeHours = () => {
     dispatch(
       fetchWorkedHours({
         period,
-        ...(selectedStaffId ? { user_id: selectedStaffId } : {}),
-      })
-    );
-    dispatch(
-      fetchAssignmentInsights({
-        ...(selectedShiftId ? { shift_id: selectedShiftId } : {}),
         ...(selectedStaffId ? { user_id: selectedStaffId } : {}),
       })
     );
@@ -80,11 +70,6 @@ const EmployeeHours = () => {
     },
   ];
 
-  const shiftOptions = (shifts || []).map((shift) => ({
-    value: shift?._id,
-    label: `${shift?.title || shift?._id} (${new Date(shift?.starts_at_utc).toLocaleString()})`,
-  }));
-
   const staffOptions = (staff || []).map((member) => ({
     value: member?._id,
     label: member?.name || member?.email || member?._id,
@@ -93,13 +78,13 @@ const EmployeeHours = () => {
   return (
     <ModuleLayoutsOne
       title="Employee Worked Hours"
-      subtitle="Track actual worked hours by week or month and review assignment insights."
+      subtitle="Track actual worked hours by week or month."
       tableTitle="Worked Hours"
       totalRecords={rows.length}
       tableHeaderBadges={[{ text: period === "month" ? "Monthly view" : "Weekly view" }]}
       filtersContent={
         <div className="space-y-3">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
               <label className="text-xs font-bold uppercase tracking-wide text-slate-500">Period</label>
               <Select
@@ -123,49 +108,12 @@ const EmployeeHours = () => {
                 placeholder="All employees"
               />
             </div>
-            <div>
-              <label className="text-xs font-bold uppercase tracking-wide text-slate-500">Shift (Insights)</label>
-              <Select
-                allowClear
-                className="w-full mt-1"
-                value={selectedShiftId || undefined}
-                onChange={(value) => setSelectedShiftId(value || "")}
-                options={shiftOptions}
-                placeholder="Optional shift"
-              />
-            </div>
             <div className="flex items-end">
-              <Button type="primary" icon={<Clock3 size={14} />} onClick={refreshData} loading={loading || insightsLoading}>
+              <Button type="primary" icon={<Clock3 size={14} />} onClick={refreshData} loading={loading}>
                 Refresh
               </Button>
             </div>
           </div>
-          <Card size="small" className="border border-slate-200 rounded-xl">
-            <p className="font-semibold mb-2">Operational Insights</p>
-            <div className="text-xs text-slate-600 space-y-1">
-              <p>
-                <strong>Sunday Night Chaos:</strong>{" "}
-                {(insights?.sunday_night_chaos?.fastest_path || []).join(" -> ") ||
-                  "Select shift and click refresh to load guidance."}
-              </p>
-              <p>
-                <strong>Overtime Trap:</strong>{" "}
-                {(insights?.overtime_trap?.at_risk_staff || []).length} at-risk staff in current window.
-              </p>
-              <p>
-                <strong>Simultaneous Assignment:</strong>{" "}
-                {insights?.simultaneous_assignment?.expected_behavior || "Refresh to load"}
-              </p>
-              <p>
-                <strong>Fairness Complaint:</strong>{" "}
-                {insights?.fairness_complaint?.note || "Refresh to load"}
-              </p>
-              <p>
-                <strong>Regret Swap:</strong>{" "}
-                {(insights?.regret_swap?.pending_requests_count ?? 0)} pending requests.
-              </p>
-            </div>
-          </Card>
         </div>
       }
       tableProps={{
